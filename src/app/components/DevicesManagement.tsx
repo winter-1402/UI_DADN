@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Plus,
   ChevronDown,
@@ -20,6 +21,7 @@ type MachineMode = "auto" | "manual";
 interface Machine {
   id: string;
   name: string;
+  zoneID: string;
   status: MachineStatus;
   temp: number;
   humidity: number;
@@ -32,21 +34,20 @@ interface Machine {
 }
 
 const initialZoneA: Machine[] = [
-  { id: "M01", name: "Dryer M01", status: "running", temp: 68, humidity: 42, mode: "auto", isOn: true, fruit: "Mango", runHours: 14, batchCode: "MG-240326-A", dryingStage: "Mid Drying" },
-  { id: "M02", name: "Dryer M02", status: "alert", temp: 77, humidity: 38, mode: "auto", isOn: true, fruit: "Banana", runHours: 9, batchCode: "BN-240326-B", dryingStage: "Final Drying" },
-  { id: "M03", name: "Dryer M03", status: "running", temp: 64, humidity: 45, mode: "manual", isOn: true, fruit: "Pineapple", runHours: 6, batchCode: "PN-240326-A", dryingStage: "Ramp-up" },
-  { id: "M04", name: "Dryer M04", status: "offline", temp: 24, humidity: 61, mode: "manual", isOn: false, fruit: "Papaya", runHours: 0, batchCode: "PP-240325-C", dryingStage: "Idle" },
-  { id: "M05", name: "Dryer M05", status: "running", temp: 71, humidity: 40, mode: "auto", isOn: true, fruit: "Mango", runHours: 11, batchCode: "MG-240326-C", dryingStage: "Conditioning" },
-  { id: "M06", name: "Dryer M06", status: "offline", temp: 23, humidity: 57, mode: "auto", isOn: false, fruit: "Guava", runHours: 0, batchCode: "GV-240325-A", dryingStage: "Waiting Material" },
+  { id: "M01", name: "Dryer M01", zoneID: "a", status: "running", temp: 68, humidity: 42, mode: "auto", isOn: true, fruit: "Mango", runHours: 14, batchCode: "MG-240326-A", dryingStage: "Mid Drying" },
+  { id: "M02", name: "Dryer M02", zoneID: "a", status: "alert", temp: 77, humidity: 38, mode: "auto", isOn: true, fruit: "Banana", runHours: 9, batchCode: "BN-240326-B", dryingStage: "Final Drying" },
+  { id: "M03", name: "Dryer M03", zoneID: "a", status: "running", temp: 64, humidity: 45, mode: "manual", isOn: true, fruit: "Pineapple", runHours: 6, batchCode: "PN-240326-A", dryingStage: "Ramp-up" },
+  { id: "M04", name: "Dryer M04", zoneID: "a", status: "offline", temp: 24, humidity: 61, mode: "manual", isOn: false, fruit: "Papaya", runHours: 0, batchCode: "PP-240325-A", dryingStage: "Maintenance" }
+
 ];
 
 const initialZoneB: Machine[] = [
-  { id: "M07", name: "Dryer M07", status: "running", temp: 65, humidity: 43, mode: "auto", isOn: true, fruit: "Orange", runHours: 8, batchCode: "OR-240326-A", dryingStage: "Pre-heating" },
-  { id: "M08", name: "Dryer M08", status: "running", temp: 67, humidity: 41, mode: "manual", isOn: true, fruit: "Lemon", runHours: 12, batchCode: "LM-240326-A", dryingStage: "Mid Drying" },
-  { id: "M09", name: "Dryer M09", status: "alert", temp: 78, humidity: 35, mode: "auto", isOn: true, fruit: "Grapefruit", runHours: 7, batchCode: "GF-240326-B", dryingStage: "Final Drying" },
-  { id: "M10", name: "Dryer M10", status: "offline", temp: 24, humidity: 63, mode: "manual", isOn: false, fruit: "Lime", runHours: 0, batchCode: "LI-240325-B", dryingStage: "Maintenance" },
-  { id: "M11", name: "Dryer M11", status: "running", temp: 69, humidity: 44, mode: "auto", isOn: true, fruit: "Orange", runHours: 5, batchCode: "OR-240326-C", dryingStage: "Ramp-up" },
-  { id: "M12", name: "Dryer M12", status: "running", temp: 66, humidity: 47, mode: "auto", isOn: true, fruit: "Mandarin", runHours: 10, batchCode: "MD-240326-A", dryingStage: "Conditioning" },
+  { id: "M07", name: "Dryer M07", zoneID: "b", status: "running", temp: 65, humidity: 43, mode: "auto", isOn: true, fruit: "Orange", runHours: 8, batchCode: "OR-240326-A", dryingStage: "Pre-heating" },
+  { id: "M08", name: "Dryer M08", zoneID: "b", status: "running", temp: 67, humidity: 41, mode: "manual", isOn: true, fruit: "Lemon", runHours: 12, batchCode: "LM-240326-A", dryingStage: "Mid Drying" },
+  { id: "M09", name: "Dryer M09", zoneID: "b", status: "alert", temp: 78, humidity: 35, mode: "auto", isOn: true, fruit: "Grapefruit", runHours: 7, batchCode: "GF-240326-B", dryingStage: "Final Drying" },
+  { id: "M10", name: "Dryer M10", zoneID: "b", status: "offline", temp: 24, humidity: 63, mode: "manual", isOn: false, fruit: "Lime", runHours: 0, batchCode: "LI-240325-B", dryingStage: "Maintenance" },
+  { id: "M11", name: "Dryer M11", zoneID: "b", status: "running", temp: 69, humidity: 44, mode: "auto", isOn: true, fruit: "Orange", runHours: 5, batchCode: "OR-240326-C", dryingStage: "Ramp-up" },
+  { id: "M12", name: "Dryer M12", zoneID: "b", status: "running", temp: 66, humidity: 47, mode: "auto", isOn: true, fruit: "Mandarin", runHours: 10, batchCode: "MD-240326-A", dryingStage: "Conditioning" },
 ];
 
 const statusConfig: Record<MachineStatus, { label: string; bg: string; text: string; dot: string; icon: React.ReactNode }> = {
@@ -101,7 +102,7 @@ function MachineCard({
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const s = statusConfig[machine.status];
-
+   const navigate = useNavigate();
   return (
     <div
       className={`bg-white rounded-xl border shadow-sm hover:shadow-md transition-all duration-200 overflow-visible relative ${
@@ -227,11 +228,11 @@ function MachineCard({
           </span>
         </span>
         <button
-          onClick={() => onViewDetails(machine.id)}
+          onClick={() => machine.isOn ? onViewDetails(machine.id) : null}
           className="flex items-center gap-0.5 text-emerald-600 hover:text-emerald-700 transition-all"
           style={{ fontSize: "0.7rem", fontWeight: 600 }}
-        >
-          Details <ChevronRight size={11} />
+      >
+          Details <ChevronRight size={11}  />
         </button>
       </div>
     </div>
@@ -296,6 +297,7 @@ function ZoneSection({
 }
 
 export function DevicesManagement() {
+  const navigate = useNavigate();
   const [zoneAMachines, setZoneAMachines] = useState(initialZoneA);
   const [zoneBMachines, setZoneBMachines] = useState(initialZoneB);
   const [zoneFilter, setZoneFilter] = useState("all");
@@ -332,6 +334,12 @@ export function DevicesManagement() {
 
   const handleViewDetails = (id: string) => {
     const machine = [...zoneAMachines, ...zoneBMachines].find((m) => m.id === id) ?? null;
+
+    if (machine && !machine.isOn) {
+      navigate("/settings");
+      return;
+    }
+
     setSelectedMachine(machine);
   };
 

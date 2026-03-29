@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Search,
   ChevronDown,
@@ -33,6 +33,7 @@ interface DryingPhase {
   name: string;
   temperature: number;
   humidity: number;
+  light: number; // in percentage (0-100)
   duration: number; // in hours
 }
 
@@ -72,9 +73,9 @@ const fruitRecipes: FruitRecipe[] = [
     name: "Mango",
     category: "tropical",
     phases: [
-      { id: "p1", name: "Pre-drying", temperature: 55, humidity: 60, duration: 2 },
-      { id: "p2", name: "Main Drying", temperature: 65, humidity: 45, duration: 8 },
-      { id: "p3", name: "Final Drying", temperature: 60, humidity: 30, duration: 4 },
+      { id: "p1", name: "Pre-drying", temperature: 55, humidity: 60, light: 30, duration: 2 },
+      { id: "p2", name: "Main Drying", temperature: 65, humidity: 45, light: 50, duration: 8 },
+      { id: "p3", name: "Final Drying", temperature: 60, humidity: 30, light: 40, duration: 4 },
     ],
     totalTime: 14,
     controlMode: "threshold",
@@ -92,9 +93,9 @@ const fruitRecipes: FruitRecipe[] = [
     name: "Banana",
     category: "tropical",
     phases: [
-      { id: "p1", name: "Initial Drying", temperature: 50, humidity: 55, duration: 3 },
-      { id: "p2", name: "Core Drying", temperature: 60, humidity: 40, duration: 6 },
-      { id: "p3", name: "Finishing", temperature: 55, humidity: 25, duration: 3 },
+      { id: "p1", name: "Initial Drying", temperature: 50, humidity: 55, light: 25, duration: 3 },
+      { id: "p2", name: "Core Drying", temperature: 60, humidity: 40, light: 45, duration: 6 },
+      { id: "p3", name: "Finishing", temperature: 55, humidity: 25, light: 35, duration: 3 },
     ],
     totalTime: 12,
     controlMode: "time",
@@ -108,9 +109,9 @@ const fruitRecipes: FruitRecipe[] = [
     name: "Pineapple",
     category: "tropical",
     phases: [
-      { id: "p1", name: "Pre-drying", temperature: 60, humidity: 65, duration: 2 },
-      { id: "p2", name: "Main Drying", temperature: 70, humidity: 50, duration: 10 },
-      { id: "p3", name: "Final Drying", temperature: 65, humidity: 35, duration: 4 },
+      { id: "p1", name: "Pre-drying", temperature: 60, humidity: 65, light: 35, duration: 2 },
+      { id: "p2", name: "Main Drying", temperature: 70, humidity: 50, light: 55, duration: 10 },
+      { id: "p3", name: "Final Drying", temperature: 65, humidity: 35, light: 45, duration: 4 },
     ],
     totalTime: 16,
     controlMode: "threshold",
@@ -124,9 +125,9 @@ const fruitRecipes: FruitRecipe[] = [
     name: "Papaya",
     category: "tropical",
     phases: [
-      { id: "p1", name: "Initial Phase", temperature: 52, humidity: 58, duration: 2.5 },
-      { id: "p2", name: "Main Phase", temperature: 62, humidity: 42, duration: 7 },
-      { id: "p3", name: "Final Phase", temperature: 58, humidity: 28, duration: 3.5 },
+      { id: "p1", name: "Initial Phase", temperature: 52, humidity: 58, light: 28, duration: 2.5 },
+      { id: "p2", name: "Main Phase", temperature: 62, humidity: 42, light: 48, duration: 7 },
+      { id: "p3", name: "Final Phase", temperature: 58, humidity: 28, light: 38, duration: 3.5 },
     ],
     totalTime: 13,
     controlMode: "manual",
@@ -138,9 +139,9 @@ const fruitRecipes: FruitRecipe[] = [
     name: "Guava",
     category: "tropical",
     phases: [
-      { id: "p1", name: "Pre-drying", temperature: 54, humidity: 62, duration: 2 },
-      { id: "p2", name: "Main Drying", temperature: 64, humidity: 48, duration: 7 },
-      { id: "p3", name: "Finishing", temperature: 60, humidity: 32, duration: 3 },
+      { id: "p1", name: "Pre-drying", temperature: 54, humidity: 62, light: 32, duration: 2 },
+      { id: "p2", name: "Main Drying", temperature: 64, humidity: 48, light: 50, duration: 7 },
+      { id: "p3", name: "Finishing", temperature: 60, humidity: 32, light: 40, duration: 3 },
     ],
     totalTime: 12,
     controlMode: "threshold",
@@ -154,9 +155,9 @@ const fruitRecipes: FruitRecipe[] = [
     name: "Orange",
     category: "citrus",
     phases: [
-      { id: "p1", name: "Pre-drying", temperature: 58, humidity: 60, duration: 2 },
-      { id: "p2", name: "Main Drying", temperature: 68, humidity: 45, duration: 9 },
-      { id: "p3", name: "Final Drying", temperature: 63, humidity: 30, duration: 4 },
+      { id: "p1", name: "Pre-drying", temperature: 58, humidity: 60, light: 30, duration: 2 },
+      { id: "p2", name: "Main Drying", temperature: 68, humidity: 45, light: 50, duration: 9 },
+      { id: "p3", name: "Final Drying", temperature: 63, humidity: 30, light: 40, duration: 4 },
     ],
     totalTime: 15,
     controlMode: "time",
@@ -170,9 +171,9 @@ const fruitRecipes: FruitRecipe[] = [
     name: "Lemon",
     category: "citrus",
     phases: [
-      { id: "p1", name: "Initial Phase", temperature: 56, humidity: 58, duration: 2 },
-      { id: "p2", name: "Core Phase", temperature: 66, humidity: 43, duration: 8 },
-      { id: "p3", name: "Finishing Phase", temperature: 61, humidity: 28, duration: 3.5 },
+      { id: "p1", name: "Initial Phase", temperature: 56, humidity: 58, light: 28, duration: 2 },
+      { id: "p2", name: "Core Phase", temperature: 66, humidity: 43, light: 48, duration: 8 },
+      { id: "p3", name: "Finishing Phase", temperature: 61, humidity: 28, light: 38, duration: 3.5 },
     ],
     totalTime: 13.5,
     controlMode: "threshold",
@@ -186,9 +187,9 @@ const fruitRecipes: FruitRecipe[] = [
     name: "Grapefruit",
     category: "citrus",
     phases: [
-      { id: "p1", name: "Pre-drying", temperature: 60, humidity: 62, duration: 2.5 },
-      { id: "p2", name: "Main Drying", temperature: 70, humidity: 48, duration: 10 },
-      { id: "p3", name: "Final Drying", temperature: 65, humidity: 33, duration: 4.5 },
+      { id: "p1", name: "Pre-drying", temperature: 60, humidity: 62, light: 32, duration: 2.5 },
+      { id: "p2", name: "Main Drying", temperature: 70, humidity: 48, light: 52, duration: 10 },
+      { id: "p3", name: "Final Drying", temperature: 65, humidity: 33, light: 42, duration: 4.5 },
     ],
     totalTime: 17,
     controlMode: "manual",
@@ -200,9 +201,9 @@ const fruitRecipes: FruitRecipe[] = [
     name: "Lime",
     category: "citrus",
     phases: [
-      { id: "p1", name: "Initial Drying", temperature: 55, humidity: 57, duration: 2 },
-      { id: "p2", name: "Main Drying", temperature: 65, humidity: 42, duration: 7.5 },
-      { id: "p3", name: "Final Drying", temperature: 60, humidity: 27, duration: 3 },
+      { id: "p1", name: "Initial Drying", temperature: 55, humidity: 57, light: 26, duration: 2 },
+      { id: "p2", name: "Main Drying", temperature: 65, humidity: 42, light: 46, duration: 7.5 },
+      { id: "p3", name: "Final Drying", temperature: 60, humidity: 27, light: 36, duration: 3 },
     ],
     totalTime: 12.5,
     controlMode: "time",
@@ -216,9 +217,9 @@ const fruitRecipes: FruitRecipe[] = [
     name: "Mandarin",
     category: "citrus",
     phases: [
-      { id: "p1", name: "Pre-drying", temperature: 57, humidity: 59, duration: 2 },
-      { id: "p2", name: "Main Drying", temperature: 67, humidity: 44, duration: 8.5 },
-      { id: "p3", name: "Finishing", temperature: 62, humidity: 29, duration: 3.5 },
+      { id: "p1", name: "Pre-drying", temperature: 57, humidity: 59, light: 29, duration: 2 },
+      { id: "p2", name: "Main Drying", temperature: 67, humidity: 44, light: 49, duration: 8.5 },
+      { id: "p3", name: "Finishing", temperature: 62, humidity: 29, light: 39, duration: 3.5 },
     ],
     totalTime: 14,
     controlMode: "threshold",
@@ -229,45 +230,6 @@ const fruitRecipes: FruitRecipe[] = [
     schedules: [],
   },
 ];
-
-function RangeSlider({
-  value,
-  min,
-  max,
-  onChange,
-  color,
-}: {
-  value: number;
-  min: number;
-  max: number;
-  onChange: (v: number) => void;
-  color: string;
-}) {
-  const pct = ((value - min) / (max - min)) * 100;
-  return (
-    <div className="relative w-full h-5 flex items-center">
-      <div className="w-full h-1.5 rounded-full bg-slate-100 relative">
-        <div
-          className="absolute left-0 top-0 h-full rounded-full"
-          style={{ width: `${pct}%`, background: color }}
-        />
-        <input
-          type="range"
-          min={min}
-          max={max}
-          value={value}
-          onChange={(e) => onChange(Number(e.target.value))}
-          className="absolute inset-0 w-full opacity-0 cursor-pointer h-full"
-          style={{ zIndex: 2 }}
-        />
-        <div
-          className="absolute top-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-white border-2 shadow-sm"
-          style={{ left: `calc(${pct}% - 8px)`, borderColor: color }}
-        />
-      </div>
-    </div>
-  );
-}
 
 function FruitSelector({
   selected,
@@ -431,7 +393,19 @@ function RecipeEditor({ recipe }: { recipe: FruitRecipe }) {
   const [schedules, setSchedules] = useState<TimeSchedule[]>(recipe.schedules);
   const [saved, setSaved] = useState(false);
 
-  const handlePhaseChange = (phaseId: string, field: keyof DryingPhase, value: number) => {
+  // Update state when recipe changes
+  useEffect(() => {
+    setPhases(recipe.phases);
+    setControlMode(recipe.controlMode);
+    setThresholds(recipe.thresholds);
+    setSchedules(recipe.schedules);
+  }, [recipe.id]);
+
+  const handlePhaseChange = (
+    phaseId: string,
+    field: keyof DryingPhase,
+    value: string | number,
+  ) => {
     setPhases((prev) =>
       prev.map((p) => (p.id === phaseId ? { ...p, [field]: value } : p))
     );
@@ -443,6 +417,7 @@ function RecipeEditor({ recipe }: { recipe: FruitRecipe }) {
       name: `Phase ${phases.length + 1}`,
       temperature: 60,
       humidity: 45,
+      light: 40,
       duration: 4,
     };
     setPhases([...phases, newPhase]);
@@ -568,6 +543,12 @@ function RecipeEditor({ recipe }: { recipe: FruitRecipe }) {
                       </span>
                     </div>
                     <div className="flex items-center justify-between">
+                      <span className="text-slate-500" style={{ fontSize: "0.68rem" }}>Light:</span>
+                      <span className="text-yellow-600" style={{ fontSize: "0.72rem", fontWeight: 600 }}>
+                        {phase.light}%
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
                       <span className="text-slate-500" style={{ fontSize: "0.68rem" }}>Time:</span>
                       <span className="text-slate-700" style={{ fontSize: "0.72rem", fontWeight: 600 }}>
                         {phase.duration}h
@@ -600,11 +581,12 @@ function RecipeEditor({ recipe }: { recipe: FruitRecipe }) {
           </button>
         </div>
 
-        {phases.map((phase, idx) => (
-          <div
-            key={phase.id}
-            className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden"
-          >
+        <div className="grid grid-flow-col auto-cols-[minmax(320px,1fr)] gap-3 overflow-x-auto pb-1">
+          {phases.map((phase, idx) => (
+            <div
+              key={phase.id}
+              className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden"
+            >
             {/* Phase Header */}
             <div className="bg-slate-50 px-4 py-3 border-b border-slate-100 flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -617,7 +599,7 @@ function RecipeEditor({ recipe }: { recipe: FruitRecipe }) {
                 <input
                   type="text"
                   value={phase.name}
-                  onChange={(e) => handlePhaseChange(phase.id, "name", e.target.value as any)}
+                  onChange={(e) => handlePhaseChange(phase.id, "name", e.target.value)}
                   className="bg-transparent text-slate-800 outline-none border-b border-transparent hover:border-emerald-300 focus:border-emerald-500 transition-all"
                   style={{ fontSize: "0.875rem", fontWeight: 700, width: "200px" }}
                 />
@@ -655,13 +637,6 @@ function RecipeEditor({ recipe }: { recipe: FruitRecipe }) {
                     <span className="text-slate-400" style={{ fontSize: "0.78rem" }}>°C</span>
                   </div>
                 </div>
-                <RangeSlider
-                  value={phase.temperature}
-                  min={20}
-                  max={100}
-                  onChange={(v) => handlePhaseChange(phase.id, "temperature", v)}
-                  color="#f97316"
-                />
                 <div className="flex justify-between mt-1">
                   <span className="text-slate-400" style={{ fontSize: "0.7rem" }}>20°C</span>
                   <span className="text-slate-400" style={{ fontSize: "0.7rem" }}>100°C</span>
@@ -690,13 +665,6 @@ function RecipeEditor({ recipe }: { recipe: FruitRecipe }) {
                     <span className="text-slate-400" style={{ fontSize: "0.78rem" }}>%</span>
                   </div>
                 </div>
-                <RangeSlider
-                  value={phase.humidity}
-                  min={10}
-                  max={100}
-                  onChange={(v) => handlePhaseChange(phase.id, "humidity", v)}
-                  color="#3b82f6"
-                />
                 <div className="flex justify-between mt-1">
                   <span className="text-slate-400" style={{ fontSize: "0.7rem" }}>10%</span>
                   <span className="text-slate-400" style={{ fontSize: "0.7rem" }}>100%</span>
@@ -726,21 +694,43 @@ function RecipeEditor({ recipe }: { recipe: FruitRecipe }) {
                     <span className="text-slate-400" style={{ fontSize: "0.78rem" }}>hours</span>
                   </div>
                 </div>
-                <RangeSlider
-                  value={phase.duration}
-                  min={0.5}
-                  max={24}
-                  onChange={(v) => handlePhaseChange(phase.id, "duration", v)}
-                  color="#64748b"
-                />
                 <div className="flex justify-between mt-1">
                   <span className="text-slate-400" style={{ fontSize: "0.7rem" }}>0.5h</span>
                   <span className="text-slate-400" style={{ fontSize: "0.7rem" }}>24h</span>
                 </div>
               </div>
+
+              {/* Light */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <Sun size={14} className="text-yellow-500" />
+                    <span className="text-slate-700" style={{ fontSize: "0.8125rem", fontWeight: 600 }}>
+                      Light Intensity
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      value={phase.light}
+                      onChange={(e) => handlePhaseChange(phase.id, "light", Number(e.target.value))}
+                      className="w-16 px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-yellow-400 text-right"
+                      style={{ fontSize: "0.8125rem", fontWeight: 700 }}
+                      min={0}
+                      max={100}
+                    />
+                    <span className="text-slate-400" style={{ fontSize: "0.78rem" }}>%</span>
+                  </div>
+                </div>
+                <div className="flex justify-between mt-1">
+                  <span className="text-slate-400" style={{ fontSize: "0.7rem" }}>0%</span>
+                  <span className="text-slate-400" style={{ fontSize: "0.7rem" }}>100%</span>
+                </div>
+              </div>
             </div>
-          </div>
-        ))}
+            </div>
+          ))}
+        </div>
 
         {/* Add Phase Button */}
         <button

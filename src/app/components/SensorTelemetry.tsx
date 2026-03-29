@@ -13,7 +13,7 @@ export function SensorTelemetry() {
     const interval = setInterval(() => {
       setTemperature((t) => Math.max(55, Math.min(80, t + (Math.random() - 0.5) * 2)));
       setHumidity((h) => Math.max(30, Math.min(70, h + (Math.random() - 0.5) * 1.5)));
-      setLight((l) => Math.max(600, Math.min(1200, l + (Math.random() - 0.5) * 30)));
+      setLight((l) => Math.max(100, Math.min(100, l + (Math.random() - 0.5) * 30)));
       setLastUpdated(new Date());
       setPulsing(true);
       setTimeout(() => setPulsing(false), 600);
@@ -109,10 +109,10 @@ export function SensorTelemetry() {
           statusColor={humidityStatus.color}
         />
         <CircularGauge
-          value={Math.round(light)}
-          max={1500}
+          value={Math.round(light / 1500 * 100)}
+          max={100}
           label="Light Intensity"
-          unit="Lux"
+          unit="%"
           color="#eab308"
           trackColor="#fef08a"
           icon={<Sun size={16} />}

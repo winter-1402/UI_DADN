@@ -55,13 +55,21 @@ const router = createBrowserRouter([
         ),
       },
       {
-        path: "settings",
+        path : "drying",
+        element : (
+          <PrivateRoute>
+            <App />
+          </PrivateRoute>
+        )
+      },
+      {
+        path: "batch",
         element: (
           <PrivateRoute>
             <App />
           </PrivateRoute>
         ),
-      },
+      }
     ],
   },
   {

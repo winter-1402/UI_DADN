@@ -8,12 +8,16 @@ import { DevicesManagement } from "./components/DevicesManagement";
 import { AutomationRules } from "./components/AutomationRules";
 import { ReportsAnalytics } from "./components/ReportsAnalytics";
 import { Settings } from "./components/Settings";
+import { DryingManagement } from "./components/DryingManagement";
+import { BatchManagement } from "./components/BatchManagement";
 
 const pageTitles: Record<string, string> = {
   dashboard: "Factory Dashboard",
   devices: "Device Management",
-  automation: "Automation Rules",
+  automation: "Recipe Automation Rules",
   reports: "Analytics & Reports",
+  drying: "Drying Management",
+  batch: "Batch Management",
   settings: "System Settings",
 };
 
@@ -35,11 +39,19 @@ export default function App() {
     "/devices": "devices",
     "/automation": "automation",
     "/reports": "reports",
+    "/drying": "drying",
+    "/batch": "batch",
     "/settings": "settings",
   };
 
   // Update activeNav when route changes
-  const currentNav = pathToNav[location.pathname] || "dashboard";
+  const currentNav = location.pathname.startsWith("/settings")
+    ? "settings"
+    : location.pathname.startsWith("/batch")
+      ? "batch"
+    : location.pathname.startsWith("/drying")
+      ? "drying"
+    : (pathToNav[location.pathname] || "dashboard");
 
   const handleNavChange = (nav: string) => {
     setActiveNav(nav);
@@ -49,6 +61,8 @@ export default function App() {
       automation: "/automation",
       reports: "/reports",
       settings: "/settings",
+      drying: "/drying",
+      batch: "/batch",
     };
     navigate(routes[nav]);
   };
@@ -64,6 +78,9 @@ export default function App() {
       {currentNav === "automation" && <AutomationRules />}
       {currentNav === "reports" && <ReportsAnalytics />}
       {currentNav === "settings" && <Settings />}
+      {currentNav === "drying" && <DryingManagement />}
+      {currentNav === "batch" && <BatchManagement />}
+
     </Layout>
   );
 }

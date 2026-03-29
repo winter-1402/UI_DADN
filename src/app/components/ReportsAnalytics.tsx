@@ -47,7 +47,7 @@ function generateDailyData(days = 30) {
     const phase = (i / days) * Math.PI * 2;
     const temp = parseFloat((62 + Math.sin(phase) * 9 + (Math.random() - 0.5) * 5).toFixed(1));
     const humidity = parseFloat((48 - Math.sin(phase) * 8 + (Math.random() - 0.5) * 4).toFixed(1));
-    const light = parseFloat((520 + Math.cos(phase) * 120 + (Math.random() - 0.5) * 60).toFixed(0));
+    const light = parseFloat((50 + Math.cos(phase) * 120 + (Math.random() - 0.5) * 60).toFixed(0));
     data.push({ day: dayLabel, temperature: temp, humidity, light });
   }
   return data;
@@ -95,7 +95,7 @@ const allLogs: ActivityLog[] = [
   { id: 26, datetime: "Mar 10, 2026 09:20 AM", zoneMachine: "Zone B / Dryer M11", eventType: "info", category: "batch", user: "Operator 2", details: "Drying batch #41 stopped — quality check complete" },
   { id: 27, datetime: "Mar 10, 2026 08:00 AM", zoneMachine: "Zone A / Dryer M04", eventType: "action", category: "machine", user: "Operator 1", details: "Manual override applied — switching to Auto mode" },
   { id: 28, datetime: "Mar 09, 2026 08:30 AM", zoneMachine: "Zone A / Dryer M04", eventType: "info", category: "machine", user: "Technician 2", details: "Machine back online after maintenance window" },
-  { id: 29, datetime: "Mar 09, 2026 07:15 AM", zoneMachine: "Zone B / Dryer M07", eventType: "info", category: "parameter", user: "Admin", details: "Light intensity threshold changed: 400 → 450 Lux" },
+  { id: 29, datetime: "Mar 09, 2026 07:15 AM", zoneMachine: "Zone B / Dryer M07", eventType: "info", category: "parameter", user: "Admin", details: "Light intensity threshold changed: 40% → 45%" },
   { id: 30, datetime: "Mar 08, 2026 04:10 PM", zoneMachine: "Zone A / Dryer M02", eventType: "warning", category: "sensor", user: "System", details: "Temperature sensor reading unstable — averaging enabled" },
 ];
 
@@ -130,7 +130,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
             </div>
             <span style={{ fontSize: "0.78rem", fontWeight: 700, color: entry.color }}>
               {entry.value}
-              {entry.name === "Temperature" ? "°C" : entry.name === "Humidity" ? "%" : " Lux"}
+              {entry.name === "Temperature" ? "°C" : entry.name === "Humidity" ? "%" : " %"}
             </span>
           </div>
         ))}
@@ -292,7 +292,7 @@ export function ReportsAnalytics() {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <StatPill label="AVG TEMPERATURE" avg={`${avgTemp}°C`} trend="up" color="#f97316" icon={<Thermometer size={16} />} />
           <StatPill label="AVG HUMIDITY" avg={`${avgHumid}%`} trend="down" color="#3b82f6" icon={<Droplets size={16} />} />
-          <StatPill label="AVG LIGHT INTENSITY" avg={`${avgLight} Lux`} trend="stable" color="#eab308" icon={<Sun size={16} />} />
+          <StatPill label="AVG LIGHT INTENSITY" avg={`${avgLight}%`} trend="stable" color="#eab308" icon={<Sun size={16} />} />
         </div>
 
         {/* 30-Day Environmental Trends Chart */}

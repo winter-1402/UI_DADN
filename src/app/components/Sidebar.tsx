@@ -4,6 +4,8 @@ import {
   Cpu,
   Zap,
   BarChart3,
+  Flame,
+  Boxes,
   Settings,
   Leaf,
   ChevronLeft,
@@ -25,9 +27,10 @@ interface SidebarProps {
 const navItems: NavItem[] = [
   { icon: <LayoutDashboard size={20} />, label: "Dashboard", id: "dashboard" },
   { icon: <Cpu size={20} />, label: "Devices", id: "devices" },
-  { icon: <Zap size={20} />, label: "Automation Rules", id: "automation" },
+  { icon: <Zap size={20} />, label: "Recipe Rules", id: "automation" },
   { icon: <BarChart3 size={20} />, label: "Reports", id: "reports" },
-  { icon: <Settings size={20} />, label: "Settings", id: "settings" },
+  { icon: <Flame size={20} />, label: "Drying", id: "drying" },
+  { icon: <Boxes size={20} />, label: "Batch", id: "batch" },
 ];
 
 export function Sidebar({ activeNav, onNavChange }: SidebarProps) {
