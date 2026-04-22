@@ -7,6 +7,8 @@ import {
 import App from "./app/App.tsx";
 import { Login } from "./app/components/Login.tsx";
 import { PrivateRoute } from "./app/components/PrivateRoute.tsx";
+import { AuthProvider } from "./context/AuthContext.tsx";
+import { UserRole, Permission } from "./types/rbac.ts";
 import "./styles/index.css";
 
 const router = createBrowserRouter([
@@ -41,7 +43,7 @@ const router = createBrowserRouter([
       {
         path: "automation",
         element: (
-          <PrivateRoute>
+          <PrivateRoute requiredPermission={Permission.MANAGE_POLICIES}>
             <App />
           </PrivateRoute>
         ),
@@ -69,6 +71,30 @@ const router = createBrowserRouter([
             <App />
           </PrivateRoute>
         ),
+      },
+      {
+        path: "user-management",
+        element: (
+          <PrivateRoute requiredRole={UserRole.ADMIN}>
+            <App />
+          </PrivateRoute>
+        ),
+      },
+      {
+        path: "role-management",
+        element: (
+          <PrivateRoute requiredRole={UserRole.ADMIN}>
+            <App />
+          </PrivateRoute>
+        ),
+      },
+      {
+        path: "settings",
+        element: (
+          <PrivateRoute requiredRole={UserRole.ADMIN}>
+            <App />
+          </PrivateRoute>
+        ),
       }
     ],
   },
@@ -79,6 +105,8 @@ const router = createBrowserRouter([
 ]);
 
 createRoot(document.getElementById("root")!).render(
-  <RouterProvider router={router} />
+  <AuthProvider>
+    <RouterProvider router={router} />
+  </AuthProvider>
 );
   

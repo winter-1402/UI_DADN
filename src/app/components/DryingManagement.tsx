@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Wind, Thermometer, Droplets, Timer, Hand, Gauge, CheckCircle2, Plus, Trash2, Target, ArrowRight } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { useIsAdmin } from "@/hooks/usePermission";
 
 const kpiCards = [
 	{
@@ -61,7 +62,7 @@ interface DryingPhase {
 	duration: number;
 }
 
-interface DryingRecipe {
+interface FruitRecipe {
 	id: string;
 	name: string;
 	phases: DryingPhase[];
@@ -114,7 +115,7 @@ const defaultPolicies: Record<string, PolicyConfig> = {
 	},
 };
 
-const dryingRecipesByFruit: Record<string, DryingRecipe[]> = {
+const dryingRecipesByFruit: Record<string, FruitRecipe[]> = {
 	mango: [
 		{
 			id: "mango-standard",
@@ -151,6 +152,90 @@ const dryingRecipesByFruit: Record<string, DryingRecipe[]> = {
 			totalTime: 16,
 		},
 	],
+	papaya: [
+		{
+			id: "papaya-standard",
+			name: "Papaya Standard",
+			phases: [
+				{ id: "p1", name: "Initial Phase", temperature: 52, humidity: 58, duration: 2.5 },
+				{ id: "p2", name: "Main Phase", temperature: 62, humidity: 42, duration: 7 },
+				{ id: "p3", name: "Final Phase", temperature: 58, humidity: 28, duration: 3.5 },
+			],
+			totalTime: 13,
+		},
+	],
+	guava: [
+		{
+			id: "guava-standard",
+			name: "Guava Standard",
+			phases: [
+				{ id: "p1", name: "Pre-drying", temperature: 54, humidity: 62, duration: 2 },
+				{ id: "p2", name: "Main Drying", temperature: 64, humidity: 48, duration: 7 },
+				{ id: "p3", name: "Finishing", temperature: 60, humidity: 32, duration: 3 },
+			],
+			totalTime: 12,
+		},
+	],
+	orange: [
+		{
+			id: "orange-standard",
+			name: "Orange Standard",
+			phases: [
+				{ id: "p1", name: "Pre-drying", temperature: 58, humidity: 60, duration: 2 },
+				{ id: "p2", name: "Main Drying", temperature: 68, humidity: 45, duration: 9 },
+				{ id: "p3", name: "Final Drying", temperature: 63, humidity: 30, duration: 4 },
+			],
+			totalTime: 15,
+		},
+	],
+	lemon: [
+		{
+			id: "lemon-standard",
+			name: "Lemon Standard",
+			phases: [
+				{ id: "p1", name: "Initial Phase", temperature: 56, humidity: 58, duration: 2 },
+				{ id: "p2", name: "Core Phase", temperature: 66, humidity: 43, duration: 8 },
+				{ id: "p3", name: "Finishing Phase", temperature: 61, humidity: 28, duration: 3.5 },
+			],
+			totalTime: 13.5,
+		},
+	],
+	grapefruit: [
+		{
+			id: "grapefruit-standard",
+			name: "Grapefruit Standard",
+			phases: [
+				{ id: "p1", name: "Pre-drying", temperature: 60, humidity: 62, duration: 2.5 },
+				{ id: "p2", name: "Main Drying", temperature: 70, humidity: 48, duration: 10 },
+				{ id: "p3", name: "Final Drying", temperature: 65, humidity: 33, duration: 4.5 },
+			],
+			totalTime: 17,
+		},
+	],
+	lime: [
+		{
+			id: "lime-standard",
+			name: "Lime Standard",
+			phases: [
+				{ id: "p1", name: "Initial Drying", temperature: 55, humidity: 57, duration: 2 },
+				{ id: "p2", name: "Main Drying", temperature: 65, humidity: 42, duration: 7.5 },
+				{ id: "p3", name: "Final Drying", temperature: 60, humidity: 27, duration: 3 },
+			],
+			totalTime: 12.5,
+		},
+	],
+	mandarin: [
+		{
+			id: "mandarin-standard",
+			name: "Mandarin Standard",
+			phases: [
+				{ id: "p1", name: "Pre-drying", temperature: 57, humidity: 59, duration: 2 },
+				{ id: "p2", name: "Main Drying", temperature: 67, humidity: 44, duration: 8.5 },
+				{ id: "p3", name: "Finishing", temperature: 62, humidity: 29, duration: 3.5 },
+			],
+			totalTime: 14,
+		},
+	],
 };
 
 const controlModeConfig: Record<ControlMode, { label: string; desc: string; icon: React.ReactNode }> = {
@@ -173,6 +258,7 @@ const controlModeConfig: Record<ControlMode, { label: string; desc: string; icon
 
 export function DryingManagement() {
 	const navigate = useNavigate();
+	const isAdmin = useIsAdmin();
 	const [selectedMachineId, setSelectedMachineId] = useState("");
 	const [selectedFruit, setSelectedFruit] = useState("");
 	const [policy, setPolicy] = useState<PolicyConfig>({
@@ -249,28 +335,6 @@ export function DryingManagement() {
 
 	return (
 		<main className="flex-1 overflow-auto p-6 space-y-6">
-			<section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-				{kpiCards.map((card) => (
-					<article
-						key={card.title}
-						className="rounded-xl bg-white border border-slate-200 p-4 shadow-sm"
-					>
-						<div className="flex items-center justify-between mb-2">
-							<p className="text-slate-500" style={{ fontSize: "0.75rem", fontWeight: 600 }}>
-								{card.title}
-							</p>
-							<card.icon size={16} className="text-emerald-600" />
-						</div>
-						<p className="text-slate-900" style={{ fontSize: "1.4rem", fontWeight: 700 }}>
-							{card.value}
-						</p>
-						<p className="text-slate-400 mt-1" style={{ fontSize: "0.75rem" }}>
-							{card.note}
-						</p>
-					</article>
-				))}
-			</section>
-
 			<section className="rounded-xl bg-white border border-slate-200 p-6 shadow-sm">
 				<div className="flex items-center justify-between gap-3">
 					<h2 className="text-slate-800" style={{ fontSize: "1rem", fontWeight: 700 }}>
@@ -316,7 +380,7 @@ export function DryingManagement() {
 					))}
 				</div>
 
-				{selectedMachine && (
+				{selectedMachine && isAdmin && (
 					<div className="mt-5 rounded-lg border border-emerald-200 bg-emerald-50/40 p-4 space-y-4">
 						<div>
 							<p className="text-slate-800" style={{ fontSize: "0.9rem", fontWeight: 700 }}>
@@ -384,47 +448,14 @@ export function DryingManagement() {
 
 								{policy.controlMode === "automations_recipe" && (
 									<div className="mt-4 space-y-2">
-										<div className="flex items-center justify-between gap-2">
-											<label className="text-slate-700 block" style={{ fontSize: "0.8125rem", fontWeight: 600 }}>
-												Automation Recipe
-											</label>
-											<button
-												onClick={handleGoToAutomationRules}
-												className="inline-flex items-center gap-1.5 px-3 py-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all"
-												style={{ fontSize: "0.75rem", fontWeight: 600 }}
-											>
-												<Plus size={12} />
-												Change recipe details   
-											</button>
-										</div>
-										{availableDryingRecipes.length > 0 ? (
-											<>
-												<select
-													value={policy.selectedRecipeId || availableDryingRecipes[0].id}
-													onChange={(e) =>
-														setPolicy((prev) => ({
-															...prev,
-															selectedRecipeId: e.target.value,
-														}))
-													}
-													className="w-full md:w-96 px-3 py-2 bg-white border border-slate-200 rounded-lg outline-none text-slate-700"
-													style={{ fontSize: "0.8125rem", fontWeight: 600 }}
-												>
-													{availableDryingRecipes.map((recipe) => (
-														<option key={recipe.id} value={recipe.id}>
-															{recipe.name}
-														</option>
-													))}
-												</select>
-												<p className="text-slate-500" style={{ fontSize: "0.72rem" }}>
-													Choose the drying recipe profile that the automation engine should run.
-												</p>
-											</>
-										) : (
-											<p className="text-slate-400" style={{ fontSize: "0.72rem" }}>
-												No automation recipes available for this fruit yet.
-											</p>
-										)}
+										<button
+											onClick={handleGoToAutomationRules}
+											className="inline-flex items-center gap-1.5 px-3 py-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all"
+											style={{ fontSize: "0.75rem", fontWeight: 600 }}
+										>
+											<Plus size={12} />
+											Go to Policies to configure recipes
+										</button>
 									</div>
 								)}
 
@@ -606,6 +637,64 @@ export function DryingManagement() {
 								</div>
 							</div>
 						)}
+					</div>
+				)}
+
+				{/* Action Type Selection for All Users (Admin & Regular Users) */}
+				{selectedMachine && !isAdmin && (
+					<div className="mt-5 rounded-lg border border-emerald-200 bg-emerald-50/40 p-4 space-y-4">
+						<div>
+							<p className="text-slate-800" style={{ fontSize: "0.9rem", fontWeight: 700 }}>
+								Select Operation Mode for {selectedMachine.name}
+							</p>
+							<p className="text-slate-500" style={{ fontSize: "0.75rem" }}>
+								Choose how to run the drying process
+							</p>
+						</div>
+
+						<div className="space-y-3">
+							<p className="text-slate-700" style={{ fontSize: "0.78rem", fontWeight: 600 }}>
+								Operation Mode
+							</p>
+							<div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+								{(["manual", "threshold", "automations_recipe"] as ControlMode[]).map((mode) => {
+									const modeConfig = controlModeConfig[mode];
+									const isActive = policy.controlMode === mode;
+
+									return (
+										<button
+											key={mode}
+											onClick={() =>
+												setPolicy((prev) => ({
+													...prev,
+													controlMode: mode,
+												}))
+											}
+											className={`rounded-md border p-3 text-left transition-all ${
+												isActive
+													? "border-emerald-300 bg-white"
+													: "border-slate-200 bg-white/70 hover:border-emerald-200"
+											}`}
+										>
+											<div className="flex items-center gap-2 text-slate-700" style={{ fontSize: "0.78rem", fontWeight: 700 }}>
+												{modeConfig.icon}
+												{modeConfig.label}
+											</div>
+											<p className="text-slate-500 mt-1" style={{ fontSize: "0.72rem" }}>
+												{modeConfig.desc}
+											</p>
+										</button>
+									);
+								})}
+							</div>
+						</div>
+
+						<div className="flex items-center gap-2 text-emerald-700" style={{ fontSize: "0.78rem", fontWeight: 600 }}>
+							<CheckCircle2 size={15} />
+							<span>
+								{selectedMachine.name} • {controlModeConfig[policy.controlMode].label}
+							</span>
+						</div>
 					</div>
 				)}
 			</section>

@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { useIsAdmin } from "@/hooks/usePermission";
 import {
   LineChart,
   Line,
@@ -166,6 +167,7 @@ function StatPill({ label, avg, trend, color, icon }: { label: string; avg: stri
 const LOGS_PER_PAGE = 8;
 
 export function ReportsAnalytics() {
+  const isAdmin = useIsAdmin();
   const [dateRange, setDateRange] = useState("30d");
   const [zoneMachine, setZoneMachine] = useState("all");
   const [eventFilter, setEventFilter] = useState<"all" | EventType>("all");
@@ -218,10 +220,10 @@ export function ReportsAnalytics() {
         {/* Page Header */}
         <div>
           <h1 className="text-slate-800" style={{ fontWeight: 700, fontSize: "1.25rem" }}>
-            Reports & Analytics
+            Reports & Analytics Dashboard
           </h1>
           <p className="text-slate-400" style={{ fontSize: "0.8rem" }}>
-            Historical sensor data, drying cycle performance, and system event logs
+            Operational, quality, incident & device efficiency reports with historical sensor data and drying cycle performance analysis
           </p>
         </div>
 
@@ -271,11 +273,12 @@ export function ReportsAnalytics() {
             </div>
 
             {/* Export Button */}
-            <div className="ml-auto">
-              <button
-                onClick={handleExport}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition-all ${
-                  exportDone
+            {isAdmin && (
+              <div className="ml-auto" >
+                <button
+                  onClick={handleExport}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition-all ${
+                    exportDone
                     ? "bg-emerald-50 border-emerald-200 text-emerald-700"
                     : "bg-white border-slate-200 text-slate-700 hover:border-emerald-400 hover:text-emerald-600"
                 }`}
@@ -285,9 +288,10 @@ export function ReportsAnalytics() {
                 {exportDone ? "Exported!" : "Export Data"}
               </button>
             </div>
+            )}
           </div>
         </div>
-
+                  
         {/* Stats Pills */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <StatPill label="AVG TEMPERATURE" avg={`${avgTemp}°C`} trend="up" color="#f97316" icon={<Thermometer size={16} />} />

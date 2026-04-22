@@ -397,10 +397,10 @@ export function Settings() {
         {/* Page Header */}
         <div>
           <h1 className="text-slate-800" style={{ fontWeight: 700, fontSize: "1.25rem" }}>
-            System Settings
+            System Settings & Administration
           </h1>
           <p className="text-slate-400" style={{ fontSize: "0.8rem" }}>
-            Configure factory parameters, control policies, and automation settings
+            Manage factory parameters, device configuration, control policies, RBAC, automation rules, and system settings
           </p>
         </div>
 

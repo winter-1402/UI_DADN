@@ -26,7 +26,10 @@ import {
   Target,
   Hand,
   Gauge,
+  Shield,
 } from "lucide-react";
+import { usePermission } from "@/hooks/usePermission";
+import { Permission } from "@/types/rbac";
 
 interface DryingPhase {
   id: string;
@@ -393,6 +396,9 @@ function RecipeEditor({ recipe }: { recipe: FruitRecipe }) {
   const [schedules, setSchedules] = useState<TimeSchedule[]>(recipe.schedules);
   const [saved, setSaved] = useState(false);
 
+  // Permission checks
+  const canDeleteRecipePhase = usePermission(Permission.DELETE_RECIPE_PHASE);
+
   // Update state when recipe changes
   useEffect(() => {
     setPhases(recipe.phases);
@@ -604,13 +610,15 @@ function RecipeEditor({ recipe }: { recipe: FruitRecipe }) {
                   style={{ fontSize: "0.875rem", fontWeight: 700, width: "200px" }}
                 />
               </div>
-              <button
-                onClick={() => handleDeletePhase(phase.id)}
-                disabled={phases.length === 1}
-                className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all disabled:opacity-30 disabled:cursor-not-allowed"
-              >
-                <Trash2 size={14} />
-              </button>
+              {canDeleteRecipePhase && (
+                <button
+                  onClick={() => handleDeletePhase(phase.id)}
+                  disabled={phases.length === 1}
+                  className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                >
+                  <Trash2 size={14} />
+                </button>
+              )}
             </div>
 
             {/* Phase Controls */}
@@ -756,11 +764,14 @@ export function AutomationRules() {
       <div className="max-w-screen-xl mx-auto">
         {/* Page Header */}
         <div className="mb-5">
-          <h1 className="text-slate-800" style={{ fontWeight: 700, fontSize: "1.25rem" }}>
-            Drying Recipes & Schedules
-          </h1>
-          <p className="text-slate-400" style={{ fontSize: "0.8rem" }}>
-            Configure multi-phase drying recipes for each fruit type with precise temperature, humidity, and timing control
+          <div className="flex items-center gap-2 mb-2">
+            <Shield size={24} className="text-emerald-600" />
+            <h1 className="text-slate-800" style={{ fontWeight: 700, fontSize: "1.25rem" }}>
+              Control Policies & Drying Recipes
+            </h1>
+          </div>
+          <p className="text-slate-400" style={{ fontSize: "0.8rem", marginLeft: "2rem" }}>
+            Define control policies with drying recipes, threshold conditions, and device mappings for each fruit type
           </p>
         </div>
 
@@ -784,7 +795,7 @@ export function AutomationRules() {
               ) : (
                 <div className="text-center py-20 text-slate-400">
                   <Apple size={48} className="mx-auto mb-3 opacity-30" />
-                  <p style={{ fontSize: "0.875rem" }}>Select a fruit type to configure its drying recipe</p>
+                  <p style={{ fontSize: "0.875rem" }}>Select a fruit type to configure its policy and drying recipe</p>
                 </div>
               )}
             </div>

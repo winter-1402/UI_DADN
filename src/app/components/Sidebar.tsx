@@ -10,13 +10,18 @@ import {
   Leaf,
   ChevronLeft,
   ChevronRight,
+  Shield,
+  Users,
+  Lock,
 } from "lucide-react";
+import { useIsAdmin } from "@/hooks/usePermission";
 
 interface NavItem {
   icon: React.ReactNode;
   label: string;
   id: string;
   badge?: number;
+  adminOnly?: boolean;
 }
 
 interface SidebarProps {
@@ -26,15 +31,22 @@ interface SidebarProps {
 
 const navItems: NavItem[] = [
   { icon: <LayoutDashboard size={20} />, label: "Dashboard", id: "dashboard" },
-  { icon: <Cpu size={20} />, label: "Devices", id: "devices" },
-  { icon: <Zap size={20} />, label: "Recipe Rules", id: "automation" },
-  { icon: <BarChart3 size={20} />, label: "Reports", id: "reports" },
-  { icon: <Flame size={20} />, label: "Drying", id: "drying" },
-  { icon: <Boxes size={20} />, label: "Batch", id: "batch" },
+  { icon: <Boxes size={20} />, label: "Batch Management", id: "batch" },
+  { icon: <Flame size={20} />, label: "Drying Operations", id: "drying" },
+  { icon: <Cpu size={20} />, label: "Device Management", id: "devices" },
+  { icon: <BarChart3 size={20} />, label: "Reports & Analytics", id: "reports" },
+  { icon: <Shield size={20} />, label: "Policies", id: "automation", adminOnly: true },
+  { icon: <Settings size={20} />, label: "Settings", id: "settings", adminOnly: true },
+  { icon: <Users size={20} />, label: "User Management", id: "user-management", adminOnly: true },
+  { icon: <Lock size={20} />, label: "Role Management", id: "role-management", adminOnly: true },
 ];
 
 export function Sidebar({ activeNav, onNavChange }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
+  const isAdmin = useIsAdmin();
+
+  // Filter nav items based on admin status
+  const visibleItems = navItems.filter(item => !item.adminOnly || isAdmin);
 
   return (
     <aside
@@ -61,7 +73,7 @@ export function Sidebar({ activeNav, onNavChange }: SidebarProps) {
 
       {/* Navigation */}
       <nav className="flex-1 py-4 px-2 space-y-1">
-        {navItems.map((item) => (
+        {visibleItems.map((item) => (
           <button
             key={item.id}
             onClick={() => onNavChange(item.id)}

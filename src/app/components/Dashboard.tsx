@@ -8,8 +8,11 @@ export function Dashboard() {
   return (
     <div className="flex-1 overflow-y-auto bg-slate-50 p-6">
       <div className="max-w-screen-xl mx-auto space-y-5">
-        {/* Row 1: Overview Stats */}
-         
+        {/* Row 1: KPI Cards */}
+        <section>
+          <h2 className="text-lg font-bold text-slate-900 mb-4">Factory Overview</h2>
+          <StatsCards />
+        </section>
 
         {/* Row 2: Sensor Telemetry + Device Controls */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">

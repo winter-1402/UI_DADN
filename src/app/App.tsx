@@ -10,6 +10,8 @@ import { ReportsAnalytics } from "./components/ReportsAnalytics";
 import { Settings } from "./components/Settings";
 import { DryingManagement } from "./components/DryingManagement";
 import { BatchManagement } from "./components/BatchManagement";
+import { UserManagement } from "./components/admin/UserManagement";
+import { RoleManagement } from "./components/admin/RoleManagement";
 
 const pageTitles: Record<string, string> = {
   dashboard: "Factory Dashboard",
@@ -19,6 +21,8 @@ const pageTitles: Record<string, string> = {
   drying: "Drying Management",
   batch: "Batch Management",
   settings: "System Settings",
+  "user-management": "User Management",
+  "role-management": "Role Management",
 };
 
 const pageMeta: Record<string, { title: string; desc: string }> = {
@@ -42,16 +46,13 @@ export default function App() {
     "/drying": "drying",
     "/batch": "batch",
     "/settings": "settings",
+    "/user-management": "user-management",
+    "/role-management": "role-management",
   };
 
   // Update activeNav when route changes
-  const currentNav = location.pathname.startsWith("/settings")
-    ? "settings"
-    : location.pathname.startsWith("/batch")
-      ? "batch"
-    : location.pathname.startsWith("/drying")
-      ? "drying"
-    : (pathToNav[location.pathname] || "dashboard");
+  const currentNav =
+    (pathToNav[location.pathname] || "dashboard");
 
   const handleNavChange = (nav: string) => {
     setActiveNav(nav);
@@ -63,6 +64,8 @@ export default function App() {
       settings: "/settings",
       drying: "/drying",
       batch: "/batch",
+      "user-management": "/user-management",
+      "role-management": "/role-management",
     };
     navigate(routes[nav]);
   };
@@ -80,6 +83,8 @@ export default function App() {
       {currentNav === "settings" && <Settings />}
       {currentNav === "drying" && <DryingManagement />}
       {currentNav === "batch" && <BatchManagement />}
+      {currentNav === "user-management" && <UserManagement />}
+      {currentNav === "role-management" && <RoleManagement />}
 
     </Layout>
   );

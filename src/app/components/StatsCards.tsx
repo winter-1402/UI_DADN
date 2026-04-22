@@ -1,4 +1,4 @@
-import { Server, Activity, AlertTriangle, TrendingUp } from "lucide-react";
+import { Server, Activity, AlertTriangle, TrendingUp, CheckCircle, Clock, Zap } from "lucide-react";
 
 interface StatCard {
   title: string;
@@ -13,34 +13,64 @@ interface StatCard {
 
 const stats: StatCard[] = [
   {
-    title: "Total Machines",
-    value: 24,
-    subtitle: "Across 3 factory lines",
-    icon: <Server size={22} />,
-    iconBg: "bg-blue-100 text-blue-600",
-    trend: "+2 this month",
-    trendUp: true,
-    accent: "border-l-blue-500",
-  },
-  {
-    title: "Active Drying",
+    title: "Machines Running",
     value: 18,
-    subtitle: "75% of total capacity",
+    subtitle: "Out of 24 total",
     icon: <Activity size={22} />,
     iconBg: "bg-emerald-100 text-emerald-600",
-    trend: "3 in queue",
+    trend: "3 stopped, 3 alert",
     trendUp: true,
     accent: "border-l-emerald-500",
   },
   {
-    title: "Critical Alerts",
-    value: 2,
-    subtitle: "Requires immediate action",
+    title: "Active Batches",
+    value: 12,
+    subtitle: "Running now",
+    icon: <Zap size={22} />,
+    iconBg: "bg-blue-100 text-blue-600",
+    trend: "4 finishing <2h",
+    trendUp: true,
+    accent: "border-l-blue-500",
+  },
+  {
+    title: "Batch Completion Rate",
+    value: "94.8%",
+    subtitle: "This week",
+    icon: <CheckCircle size={22} />,
+    iconBg: "bg-cyan-100 text-cyan-600",
+    trend: "+2.3% vs last week",
+    trendUp: true,
+    accent: "border-l-cyan-500",
+  },
+  {
+    title: "Avg Drying Time",
+    value: "11.8h",
+    subtitle: "All fruit types",
+    icon: <Clock size={22} />,
+    iconBg: "bg-orange-100 text-orange-600",
+    trend: "-0.6h vs 7-day avg",
+    trendUp: true,
+    accent: "border-l-orange-500",
+  },
+  {
+    title: "Threshold Alerts",
+    value: 3,
+    subtitle: "This week",
     icon: <AlertTriangle size={22} />,
     iconBg: "bg-red-100 text-red-600",
-    trend: "Last: Temp >70°C",
+    trend: "2 by Zone B",
     trendUp: false,
     accent: "border-l-red-500",
+  },
+  {
+    title: "Equipment Status",
+    value: "98.2%",
+    subtitle: "System uptime",
+    icon: <Server size={22} />,
+    iconBg: "bg-purple-100 text-purple-600",
+    trend: "No downtime today",
+    trendUp: true,
+    accent: "border-l-purple-500",
   },
 ];
 
