@@ -5,11 +5,10 @@ import { Header } from "./components/Header";
 import { Layout } from "./components/Layout";
 import { Dashboard } from "./components/Dashboard";
 import { DevicesManagement } from "./components/DevicesManagement";
+import { DeviceDetail } from "./components/DeviceDetail";
 import { AutomationRules } from "./components/AutomationRules";
 import { ReportsAnalytics } from "./components/ReportsAnalytics";
 import { Settings } from "./components/Settings";
-import { DryingManagement } from "./components/DryingManagement";
-import { BatchManagement } from "./components/BatchManagement";
 
 const pageTitles: Record<string, string> = {
   dashboard: "Factory Dashboard",
@@ -33,25 +32,23 @@ export default function App() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // Map routes to navbar items
   const pathToNav: Record<string, string> = {
     "/dashboard": "dashboard",
     "/devices": "devices",
     "/automation": "automation",
     "/reports": "reports",
-    "/drying": "drying",
-    "/batch": "batch",
     "/settings": "settings",
   };
 
-  // Update activeNav when route changes
-  const currentNav = location.pathname.startsWith("/settings")
-    ? "settings"
-    : location.pathname.startsWith("/batch")
-      ? "batch"
-    : location.pathname.startsWith("/drying")
-      ? "drying"
-    : (pathToNav[location.pathname] || "dashboard");
+  const resolveNavFromPath = (path: string) => {
+    if (path.startsWith("/settings")) return "settings";
+    if (path.startsWith("/devices")) return "devices";
+    if (path.startsWith("/automation")) return "automation";
+    if (path.startsWith("/reports")) return "reports";
+    return pathToNav[path] || "dashboard";
+  };
+
+  const currentNav = resolveNavFromPath(location.pathname);
 
   const handleNavChange = (nav: string) => {
     setActiveNav(nav);
@@ -61,8 +58,6 @@ export default function App() {
       automation: "/automation",
       reports: "/reports",
       settings: "/settings",
-      drying: "/drying",
-      batch: "/batch",
     };
     navigate(routes[nav]);
   };
@@ -74,12 +69,10 @@ export default function App() {
       onNavChange={handleNavChange}
     >
       {currentNav === "dashboard" && <Dashboard />}
-      {currentNav === "devices" && <DevicesManagement />}
+      {currentNav === "devices" && (location.pathname.startsWith("/devices/") && location.pathname !== "/devices" ? <DeviceDetail /> : <DevicesManagement />)}
       {currentNav === "automation" && <AutomationRules />}
       {currentNav === "reports" && <ReportsAnalytics />}
       {currentNav === "settings" && <Settings />}
-      {currentNav === "drying" && <DryingManagement />}
-      {currentNav === "batch" && <BatchManagement />}
 
     </Layout>
   );

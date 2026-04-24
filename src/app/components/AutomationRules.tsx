@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import { usePermission } from "@/hooks/usePermission";
 import { Permission } from "@/types/rbac";
+import { DeviceMappingPanel } from "./DeviceMappingPanel";
 
 interface DryingPhase {
   id: string;
@@ -748,6 +749,10 @@ function RecipeEditor({ recipe }: { recipe: FruitRecipe }) {
           <Plus size={16} />
           <span style={{ fontSize: "0.8125rem", fontWeight: 600 }}>Add New Phase</span>
         </button>
+
+        {/* Device Mapping: allow mapping recipe -> output devices (UI-only) */}
+        <DeviceMappingPanel recipeId={recipe.id} />
+
       </div>
     </div>
   );

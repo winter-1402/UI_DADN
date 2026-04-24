@@ -1,22 +1,28 @@
 import { useState } from "react";
 import {
   LayoutDashboard,
-  Cpu,
-  Zap,
   BarChart3,
-  Flame,
   Boxes,
   Settings,
   Leaf,
   ChevronLeft,
   ChevronRight,
+  Users,
+  Factory,
+  BookOpen
 } from "lucide-react";
-
+export function useIsAdmin() {
+  // Tạm thời hardcode trả về true để bạn có thể xem được 
+  // toàn bộ các menu của Admin trong quá trình thiết kế UI.
+  // Sau này khi team Backend (Hiếu, Huy) làm phân quyền xong thì sẽ thay đổi logic ở đây.
+  return true; 
+}
 interface NavItem {
   icon: React.ReactNode;
   label: string;
   id: string;
   badge?: number;
+  adminOnly?: boolean;
 }
 
 interface SidebarProps {
@@ -24,17 +30,26 @@ interface SidebarProps {
   onNavChange: (id: string) => void;
 }
 
+// Đã cập nhật lại Menu theo chuẩn tài liệu Describe.md
 const navItems: NavItem[] = [
+  // --- Dành cho mọi User ---
   { icon: <LayoutDashboard size={20} />, label: "Dashboard", id: "dashboard" },
-  { icon: <Cpu size={20} />, label: "Devices", id: "devices" },
-  { icon: <Zap size={20} />, label: "Recipe Rules", id: "automation" },
-  { icon: <BarChart3 size={20} />, label: "Reports", id: "reports" },
-  { icon: <Flame size={20} />, label: "Drying", id: "drying" },
-  { icon: <Boxes size={20} />, label: "Batch", id: "batch" },
+  { icon: <Factory size={20} />, label: "Quản lý Phân xưởng", id: "factory-layout" }, // Quản lý Khu vực, Máy sấy, Sensor, Output
+  // Batch management moved into Devices page
+  { icon: <BarChart3 size={20} />, label: "Báo cáo & Thống kê", id: "reports" },
+  
+  // --- Chỉ dành cho Admin ---
+  { icon: <BookOpen size={20} />, label: "Danh mục & Công thức", id: "master-data", adminOnly: true }, // Cài đặt Recipe, Fruit, Policy, Threshold
+  { icon: <Users size={20} />, label: "Quản lý Người dùng", id: "user-management", adminOnly: true },
+  { icon: <Settings size={20} />, label: "Cài đặt Hệ thống", id: "settings", adminOnly: true },
 ];
 
 export function Sidebar({ activeNav, onNavChange }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
+  const isAdmin = useIsAdmin(); // Hook kiểm tra quyền Admin
+
+  // Lọc các menu: Nếu là Admin thì thấy hết, nếu là User thường thì ẩn các menu adminOnly
+  const visibleItems = navItems.filter(item => !item.adminOnly || isAdmin);
 
   return (
     <aside
@@ -49,19 +64,19 @@ export function Sidebar({ activeNav, onNavChange }: SidebarProps) {
         </div>
         {!collapsed && (
           <div className="overflow-hidden">
-            <p className="text-white truncate" style={{ fontWeight: 700, fontSize: "0.875rem" }}>
-              FruitDry IMS
+            <p className="text-white truncate font-bold text-sm">
+              FruitDry MES
             </p>
-            <p className="text-slate-400 truncate" style={{ fontSize: "0.7rem" }}>
-              Industrial IoT
+            <p className="text-emerald-400 truncate text-xs">
+              Factory Management
             </p>
           </div>
         )}
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 py-4 px-2 space-y-1">
-        {navItems.map((item) => (
+      <nav className="flex-1 py-4 px-2 space-y-1 overflow-y-auto overflow-x-hidden custom-scrollbar">
+        {visibleItems.map((item) => (
           <button
             key={item.id}
             onClick={() => onNavChange(item.id)}
@@ -75,8 +90,7 @@ export function Sidebar({ activeNav, onNavChange }: SidebarProps) {
             <span className="shrink-0">{item.icon}</span>
             {!collapsed && (
               <span
-                className="truncate text-left"
-                style={{ fontSize: "0.875rem", fontWeight: activeNav === item.id ? 600 : 400 }}
+                className={`truncate text-left text-sm ${activeNav === item.id ? "font-semibold" : "font-normal"}`}
               >
                 {item.label}
               </span>
@@ -93,8 +107,8 @@ export function Sidebar({ activeNav, onNavChange }: SidebarProps) {
       {/* Version & Collapse */}
       <div className="border-t border-slate-700 p-3">
         {!collapsed && (
-          <p className="text-slate-500 mb-2 px-1" style={{ fontSize: "0.7rem" }}>
-            v2.4.1 — Factory OS
+          <p className="text-slate-500 mb-2 px-1 text-xs">
+            v3.0.0 — MES System
           </p>
         )}
         <button
@@ -102,7 +116,7 @@ export function Sidebar({ activeNav, onNavChange }: SidebarProps) {
           className="w-full flex items-center justify-center p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-all"
         >
           {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
-          {!collapsed && <span className="ml-2" style={{ fontSize: "0.75rem" }}>Collapse</span>}
+          {!collapsed && <span className="ml-2 text-xs">Thu gọn</span>}
         </button>
       </div>
     </aside>

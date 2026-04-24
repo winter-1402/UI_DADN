@@ -31,8 +31,6 @@ interface SidebarProps {
 
 const navItems: NavItem[] = [
   { icon: <LayoutDashboard size={20} />, label: "Dashboard", id: "dashboard" },
-  { icon: <Boxes size={20} />, label: "Batch Management", id: "batch" },
-  { icon: <Flame size={20} />, label: "Drying Operations", id: "drying" },
   { icon: <Cpu size={20} />, label: "Device Management", id: "devices" },
   { icon: <BarChart3 size={20} />, label: "Reports & Analytics", id: "reports" },
   { icon: <Shield size={20} />, label: "Policies", id: "automation", adminOnly: true },

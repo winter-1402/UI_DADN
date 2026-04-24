@@ -289,6 +289,16 @@ export function Settings() {
   const handleFruitChange = (fruitId: string) => {
     const firstRecipeId = dryingRecipesByFruit[fruitId]?.[0]?.id || "";
     setSelectedFruit(fruitId);
+    try {
+      const saved = JSON.parse(localStorage.getItem("policies") || "{}");
+      if (saved && saved[fruitId]) {
+        setPolicy(saved[fruitId]);
+        return;
+      }
+    } catch (e) {
+      // ignore
+    }
+
     setPolicy(defaultPolicies[fruitId] || {
       fruitType: fruitId,
       controlMode: "manual",
@@ -357,6 +367,16 @@ export function Settings() {
   };
 
   const handleSave = () => {
+    // persist current policy to localStorage keyed by fruitType
+    try {
+      const raw = localStorage.getItem("policies") || "{}";
+      const parsed = JSON.parse(raw);
+      if (policy && policy.fruitType) {
+        parsed[policy.fruitType] = policy;
+        localStorage.setItem("policies", JSON.stringify(parsed));
+      }
+    } catch (e) {}
+
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
   };
