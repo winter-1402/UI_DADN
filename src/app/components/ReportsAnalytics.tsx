@@ -1,5 +1,10 @@
 import { useState, useMemo } from "react";
-import { useIsAdmin } from "@/hooks/usePermission";
+export function useIsAdmin() {
+  // Tạm thời hardcode trả về true để bạn có thể xem được 
+  // toàn bộ các menu của Admin trong quá trình thiết kế UI.
+  // Sau này khi team Backend (Hiếu, Huy) làm phân quyền xong thì sẽ thay đổi logic ở đây.
+  return true; 
+}
 import {
   LineChart,
   Line,

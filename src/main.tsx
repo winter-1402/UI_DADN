@@ -63,6 +63,7 @@ const router = createBrowserRouter([
             <App />
           </PrivateRoute>
         ),
+      },
       {
         path: "user-management",
         element: (
