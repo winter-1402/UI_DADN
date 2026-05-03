@@ -1,5 +1,4 @@
-import { useEffect, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useState } from "react";
 import {
   Settings as SettingsIcon,
   Save,
@@ -230,8 +229,6 @@ const dryingRecipesByFruit: Record<string, DryingRecipe[]> = {
 };
 
 export function Settings() {
-  const navigate = useNavigate();
-  const location = useLocation();
   const [selectedFruit, setSelectedFruit] = useState("");
   const [selectedZone, setSelectedZone] = useState("");
   const [selectedMachine, setSelectedMachine] = useState("");
@@ -245,54 +242,13 @@ export function Settings() {
   });
   const [saved, setSaved] = useState(false);
 
-  const zoneIdToPathValue: Record<string, string> = {
-    "zone-a": "a",
-    "zone-b": "b",
-  };
-
-  const pathValueToZoneId: Record<string, string> = {
-    a: "zone-a",
-    b: "zone-b",
-  };
-
-  useEffect(() => {
-    const match = location.pathname.match(/^\/settings\/zone=(.+?)(?:\/machine=(.+))?$/);
-
-    if (!match) {
-      if (selectedZone || selectedMachine) {
-        setSelectedZone("");
-        setSelectedMachine("");
-        setSelectedFruit("");
-      }
-      return;
-    }
-
-    const normalizedZonePathValue = decodeURIComponent(match[1]).replaceAll('"', "");
-    const normalizedMachinePathValue = decodeURIComponent(match[2] || "").replaceAll('"', "");
-
-    const zoneId = pathValueToZoneId[normalizedZonePathValue] || "";
-    const machinesInZone = zoneId ? machinesByZone[zoneId] || [] : [];
-    const hasMachineInZone = machinesInZone.some((machine) => machine.id === normalizedMachinePathValue);
-    const machineId = hasMachineInZone ? normalizedMachinePathValue : "";
-
-    if (zoneId !== selectedZone) {
-      setSelectedZone(zoneId);
-      setSelectedFruit("");
-    }
-
-    if (machineId !== selectedMachine) {
-      setSelectedMachine(machineId);
-      setSelectedFruit("");
-    }
-  }, [location.pathname, pathValueToZoneId, selectedMachine, selectedZone]);
-
   const handleFruitChange = (fruitId: string) => {
     const firstRecipeId = dryingRecipesByFruit[fruitId]?.[0]?.id || "";
     setSelectedFruit(fruitId);
     try {
-      const saved = JSON.parse(localStorage.getItem("policies") || "{}");
-      if (saved && saved[fruitId]) {
-        setPolicy(saved[fruitId]);
+        const savedPolicies = JSON.parse(localStorage.getItem("policies") || "{}");
+      if (savedPolicies && savedPolicies[fruitId]) {
+        setPolicy(savedPolicies[fruitId]);
         return;
       }
     } catch (e) {
@@ -462,17 +418,9 @@ export function Settings() {
                 value={selectedZone}
                 onChange={(e) => {
                   const zoneId = e.target.value;
-                  const zonePathValue = zoneIdToPathValue[zoneId];
-
                   setSelectedZone(zoneId);
                   setSelectedMachine("");
                   setSelectedFruit("");
-
-                  if (zonePathValue) {
-                    navigate(`/settings/zone=\"${zonePathValue}\"`);
-                  } else {
-                    navigate("/settings");
-                  }
                 }}
                 className="w-full md:w-96 px-3 py-2 bg-white border border-slate-200 rounded-lg outline-none text-slate-700"
                 style={{ fontSize: "0.8125rem", fontWeight: 600 }}
@@ -501,18 +449,8 @@ export function Settings() {
                   value={selectedMachine}
                   onChange={(e) => {
                     const machineId = e.target.value;
-                    const zonePathValue = zoneIdToPathValue[selectedZone];
-
                     setSelectedMachine(machineId);
                     setSelectedFruit("");
-
-                    if (zonePathValue && machineId) {
-                      navigate(`/settings/zone=\"${zonePathValue}\"/machine=\"${machineId}\"`);
-                    } else if (zonePathValue) {
-                      navigate(`/settings/zone=\"${zonePathValue}\"`);
-                    } else {
-                      navigate("/settings");
-                    }
                   }}
                   className="w-full md:w-96 px-3 py-2 bg-white border border-slate-200 rounded-lg outline-none text-slate-700"
                   style={{ fontSize: "0.8125rem", fontWeight: 600 }}

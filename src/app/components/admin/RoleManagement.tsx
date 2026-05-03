@@ -179,6 +179,8 @@ export function RoleManagement() {
                           indeterminate={
                             hasSomePermissions(roleIndex, permissions) &&
                             !hasAllPermissions(roleIndex, permissions)
+                              ? true
+                              : undefined
                           }
                           onCheckedChange={() =>
                             toggleCategoryPermissions(roleIndex, permissions)
