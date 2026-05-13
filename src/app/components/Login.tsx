@@ -16,22 +16,24 @@ export function Login() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+
+    if (!email || !password) {
+      setError("Vui lòng nhập email và mật khẩu");
+      return;
+    }
+
     setIsLoading(true);
-
     try {
-      if (!email || !password) {
-        setError("Vui lòng nhập email và mật khẩu");
-        setIsLoading(false);
-        return;
-      }
-
-      // Use the auth context login
+      // Calls POST /api/v1/auth/login via AuthContext, which persists
+      // access_token in localStorage and loads the current user.
       await login(email, password);
-
-      // Redirect to dashboard
       navigate("/dashboard");
     } catch (err) {
-      setError("Đăng nhập thất bại. Vui lòng thử lại.");
+      const message =
+        err instanceof Error && err.message
+          ? err.message
+          : "Đăng nhập thất bại. Vui lòng thử lại.";
+      setError(message);
     } finally {
       setIsLoading(false);
     }
@@ -63,6 +65,7 @@ export function Login() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 disabled={isLoading}
+                autoComplete="email"
                 className="w-full"
               />
             </div>
@@ -81,6 +84,7 @@ export function Login() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 disabled={isLoading}
+                autoComplete="current-password"
                 className="w-full"
               />
             </div>
@@ -109,19 +113,15 @@ export function Login() {
             <div>
               <p className="font-medium text-slate-700">Admin Account:</p>
               <p className="text-slate-600">
-                Email: <code className="bg-white px-2 py-1 rounded">admin@example.com</code>
-              </p>
-              <p className="text-slate-600">
-                Password: <code className="bg-white px-2 py-1 rounded">password</code>
+                Email: <code className="bg-white px-2 py-1 rounded">admin@gmail.com</code>
+                Password: <code className="bg-white px-2 py-1 rounded">123456</code>
               </p>
             </div>
             <div>
               <p className="font-medium text-slate-700">User Account:</p>
               <p className="text-slate-600">
-                Email: <code className="bg-white px-2 py-1 rounded">user@example.com</code>
-              </p>
-              <p className="text-slate-600">
-                Password: <code className="bg-white px-2 py-1 rounded">password</code>
+                Email: <code className="bg-white px-2 py-1 rounded">operator@gmail.com</code>
+                Password: <code className="bg-white px-2 py-1 rounded">123456</code>
               </p>
             </div>
           </div>

@@ -13,7 +13,7 @@ export function Header({ pageTitle }: HeaderProps) {
   const { user, logout } = useAuth();
   const [showDropdown, setShowDropdown] = useState(false);
 
-  const userName = user?.fullName || "User";
+  const userName = user?.app_user_name || "User";
   const userEmail = user?.email || "user@example.com";
   const userRole = user?.role || UserRole.USER;
   const userInitials = userName

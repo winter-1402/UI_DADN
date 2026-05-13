@@ -27,9 +27,12 @@ import {
   Hand,
   Gauge,
   Shield,
+  Loader2,
+  Lightbulb,
 } from "lucide-react";
-import { usePermission } from "@/hooks/usePermission";
-import { Permission } from "@/types/rbac";
+import { catalogAPI } from "../config/api.config";
+import { usePermission } from "../../hooks/usePermission";
+import { Permission } from "../../types/rbac";
 import { DeviceMappingPanel } from "./DeviceMappingPanel";
 
 interface DryingPhase {
@@ -39,6 +42,10 @@ interface DryingPhase {
   humidity: number;
   light: number; // in percentage (0-100)
   duration: number; // in hours
+  scheduleType: "fixed" | "recurring"; // fixed time or recurring interval
+  fixedTime?: string; // HH:MM format, e.g. "08:00"
+  recurringInterval?: number; // hours between runs, e.g. 8
+  controlDevices: string[]; // array of device IDs that operate during this phase
 }
 
 type ControlMode = "manual" | "threshold" | "time";
@@ -69,186 +76,42 @@ interface FruitRecipe {
   controlMode: ControlMode;
   thresholds: ThresholdRule[];
   schedules: TimeSchedule[];
+  recipe_id?: number;
 }
 
-const fruitRecipes: FruitRecipe[] = [
-  {
-    id: "mango",
-    name: "Mango",
-    category: "tropical",
-    phases: [
-      { id: "p1", name: "Pre-drying", temperature: 55, humidity: 60, light: 30, duration: 2 },
-      { id: "p2", name: "Main Drying", temperature: 65, humidity: 45, light: 50, duration: 8 },
-      { id: "p3", name: "Final Drying", temperature: 60, humidity: 30, light: 40, duration: 4 },
-    ],
-    totalTime: 14,
-    controlMode: "threshold",
-    thresholds: [
-      { id: "t1", sensor: "temperature", condition: "above", value: 70, action: "Turn on exhaust fan", enabled: true },
-      { id: "t2", sensor: "humidity", condition: "below", value: 35, action: "Reduce heater power", enabled: true },
-    ],
-    schedules: [
-      { id: "s1", name: "Day Mode", startTime: "06:00", endTime: "18:00", active: true },
-      { id: "s2", name: "Night Mode", startTime: "18:00", endTime: "06:00", active: true },
-    ],
-  },
-  {
-    id: "banana",
-    name: "Banana",
-    category: "tropical",
-    phases: [
-      { id: "p1", name: "Initial Drying", temperature: 50, humidity: 55, light: 25, duration: 3 },
-      { id: "p2", name: "Core Drying", temperature: 60, humidity: 40, light: 45, duration: 6 },
-      { id: "p3", name: "Finishing", temperature: 55, humidity: 25, light: 35, duration: 3 },
-    ],
-    totalTime: 12,
-    controlMode: "time",
-    thresholds: [],
-    schedules: [
-      { id: "s1", name: "Active Period", startTime: "07:00", endTime: "19:00", active: true },
-    ],
-  },
-  {
-    id: "pineapple",
-    name: "Pineapple",
-    category: "tropical",
-    phases: [
-      { id: "p1", name: "Pre-drying", temperature: 60, humidity: 65, light: 35, duration: 2 },
-      { id: "p2", name: "Main Drying", temperature: 70, humidity: 50, light: 55, duration: 10 },
-      { id: "p3", name: "Final Drying", temperature: 65, humidity: 35, light: 45, duration: 4 },
-    ],
-    totalTime: 16,
-    controlMode: "threshold",
-    thresholds: [
-      { id: "t1", sensor: "temperature", condition: "above", value: 75, action: "Activate cooling", enabled: true },
-    ],
-    schedules: [],
-  },
-  {
-    id: "papaya",
-    name: "Papaya",
-    category: "tropical",
-    phases: [
-      { id: "p1", name: "Initial Phase", temperature: 52, humidity: 58, light: 28, duration: 2.5 },
-      { id: "p2", name: "Main Phase", temperature: 62, humidity: 42, light: 48, duration: 7 },
-      { id: "p3", name: "Final Phase", temperature: 58, humidity: 28, light: 38, duration: 3.5 },
-    ],
-    totalTime: 13,
-    controlMode: "manual",
-    thresholds: [],
-    schedules: [],
-  },
-  {
-    id: "guava",
-    name: "Guava",
-    category: "tropical",
-    phases: [
-      { id: "p1", name: "Pre-drying", temperature: 54, humidity: 62, light: 32, duration: 2 },
-      { id: "p2", name: "Main Drying", temperature: 64, humidity: 48, light: 50, duration: 7 },
-      { id: "p3", name: "Finishing", temperature: 60, humidity: 32, light: 40, duration: 3 },
-    ],
-    totalTime: 12,
-    controlMode: "threshold",
-    thresholds: [
-      { id: "t1", sensor: "humidity", condition: "above", value: 70, action: "Open drying door", enabled: true },
-    ],
-    schedules: [],
-  },
-  {
-    id: "orange",
-    name: "Orange",
-    category: "citrus",
-    phases: [
-      { id: "p1", name: "Pre-drying", temperature: 58, humidity: 60, light: 30, duration: 2 },
-      { id: "p2", name: "Main Drying", temperature: 68, humidity: 45, light: 50, duration: 9 },
-      { id: "p3", name: "Final Drying", temperature: 63, humidity: 30, light: 40, duration: 4 },
-    ],
-    totalTime: 15,
-    controlMode: "time",
-    thresholds: [],
-    schedules: [
-      { id: "s1", name: "Full Power", startTime: "08:00", endTime: "20:00", active: true },
-    ],
-  },
-  {
-    id: "lemon",
-    name: "Lemon",
-    category: "citrus",
-    phases: [
-      { id: "p1", name: "Initial Phase", temperature: 56, humidity: 58, light: 28, duration: 2 },
-      { id: "p2", name: "Core Phase", temperature: 66, humidity: 43, light: 48, duration: 8 },
-      { id: "p3", name: "Finishing Phase", temperature: 61, humidity: 28, light: 38, duration: 3.5 },
-    ],
-    totalTime: 13.5,
-    controlMode: "threshold",
-    thresholds: [
-      { id: "t1", sensor: "temperature", condition: "above", value: 72, action: "Reduce heater to 70%", enabled: true },
-    ],
-    schedules: [],
-  },
-  {
-    id: "grapefruit",
-    name: "Grapefruit",
-    category: "citrus",
-    phases: [
-      { id: "p1", name: "Pre-drying", temperature: 60, humidity: 62, light: 32, duration: 2.5 },
-      { id: "p2", name: "Main Drying", temperature: 70, humidity: 48, light: 52, duration: 10 },
-      { id: "p3", name: "Final Drying", temperature: 65, humidity: 33, light: 42, duration: 4.5 },
-    ],
-    totalTime: 17,
-    controlMode: "manual",
-    thresholds: [],
-    schedules: [],
-  },
-  {
-    id: "lime",
-    name: "Lime",
-    category: "citrus",
-    phases: [
-      { id: "p1", name: "Initial Drying", temperature: 55, humidity: 57, light: 26, duration: 2 },
-      { id: "p2", name: "Main Drying", temperature: 65, humidity: 42, light: 46, duration: 7.5 },
-      { id: "p3", name: "Final Drying", temperature: 60, humidity: 27, light: 36, duration: 3 },
-    ],
-    totalTime: 12.5,
-    controlMode: "time",
-    thresholds: [],
-    schedules: [
-      { id: "s1", name: "Standard Schedule", startTime: "06:00", endTime: "22:00", active: true },
-    ],
-  },
-  {
-    id: "mandarin",
-    name: "Mandarin",
-    category: "citrus",
-    phases: [
-      { id: "p1", name: "Pre-drying", temperature: 57, humidity: 59, light: 29, duration: 2 },
-      { id: "p2", name: "Main Drying", temperature: 67, humidity: 44, light: 49, duration: 8.5 },
-      { id: "p3", name: "Finishing", temperature: 62, humidity: 29, light: 39, duration: 3.5 },
-    ],
-    totalTime: 14,
-    controlMode: "threshold",
-    thresholds: [
-      { id: "t1", sensor: "temperature", condition: "above", value: 73, action: "Activate fan", enabled: true },
-      { id: "t2", sensor: "humidity", condition: "below", value: 25, action: "Add moisture", enabled: false },
-    ],
-    schedules: [],
-  },
-];
+// Helper function to transform API phase response to DryingPhase format
+function transformApiPhases(phases: any[]): DryingPhase[] {
+  return (phases || []).map((phase: any, index: number) => ({
+    id: String(phase.phase_id || index),
+    name: `Phase ${phase.phase_order || index + 1}`,
+    temperature: phase.temperature || 0,
+    humidity: phase.humidity || 0,
+    light: 0, // API doesn't provide light value, default to 0
+    duration: phase.duration_seconds ? phase.duration_seconds / 3600 : 0, // convert seconds to hours
+    scheduleType: phase.schedule_type || "fixed",
+    fixedTime: phase.fixed_time || "08:00",
+    recurringInterval: phase.recurring_interval || 8,
+    controlDevices: phase.control_devices || [],
+  }));
+}
 
 function FruitSelector({
   selected,
   onSelect,
   search,
   onSearch,
+  recipes = [],
 }: {
   selected: string | null;
-  onSelect: (fruitId: string) => void;
+  onSelect: (recipeId: string) => void;
   search: string;
   onSearch: (s: string) => void;
+  recipes: FruitRecipe[];
 }) {
   const groupedFruits = {
-    tropical: fruitRecipes.filter((f) => f.category === "tropical"),
-    citrus: fruitRecipes.filter((f) => f.category === "citrus"),
+    tropical: recipes.filter((f) => f.category === "tropical"),
+    citrus: recipes.filter((f) => f.category === "citrus"),
+    other: recipes.filter((f) => f.category === "other"),
   };
 
   const filteredFruits = {
@@ -256,6 +119,9 @@ function FruitSelector({
       f.name.toLowerCase().includes(search.toLowerCase())
     ),
     citrus: groupedFruits.citrus.filter((f) =>
+      f.name.toLowerCase().includes(search.toLowerCase())
+    ),
+    other: groupedFruits.other.filter((f) =>
       f.name.toLowerCase().includes(search.toLowerCase())
     ),
   };
@@ -267,14 +133,14 @@ function FruitSelector({
         <div className="flex items-center gap-2 mb-3">
           <Apple size={15} className="text-emerald-500" />
           <h2 className="text-slate-800" style={{ fontWeight: 700, fontSize: "0.9375rem" }}>
-            Fruit Types
+            Recipes
           </h2>
         </div>
         <div className="relative">
           <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
-            placeholder="Search fruit types..."
+            placeholder="Search recipes..."
             value={search}
             onChange={(e) => onSearch(e.target.value)}
             className="w-full pl-8 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-emerald-400 focus:border-emerald-400 transition-all"
@@ -283,9 +149,9 @@ function FruitSelector({
         </div>
       </div>
 
-      {/* Fruit List */}
+      {/* Recipe List */}
       <div className="flex-1 overflow-y-auto p-2 space-y-3">
-        {/* Tropical Fruits */}
+        {/* Tropical Recipes */}
         {filteredFruits.tropical.length > 0 && (
           <div>
             <div className="px-2 py-1 mb-1">
@@ -297,32 +163,16 @@ function FruitSelector({
               {filteredFruits.tropical.map((fruit) => (
                 <button
                   key={fruit.id}
-                  onClick={() => onSelect(fruit.id)}
+                  onClick={() => onSelect(String(fruit.recipe_id))}
                   className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg transition-all ${
-                    selected === fruit.id
+                    selected === String(fruit.recipe_id)
                       ? "bg-emerald-500 text-white"
                       : "text-slate-700 hover:bg-slate-50"
                   }`}
                 >
                   <div className="flex items-center gap-2">
-                    <Apple size={14} className={selected === fruit.id ? "text-white" : "text-emerald-500"} />
+                    <Apple size={14} className={selected === String(fruit.recipe_id) ? "text-white" : "text-emerald-500"} />
                     <span style={{ fontSize: "0.8125rem", fontWeight: 600 }}>{fruit.name}</span>
-                  </div>
-                  <div className="flex flex-col items-end">
-                    <span
-                      className={`px-1.5 py-0.5 rounded text-xs ${
-                        selected === fruit.id ? "bg-white/20 text-white" : "bg-slate-100 text-slate-500"
-                      }`}
-                      style={{ fontSize: "0.65rem", fontWeight: 600 }}
-                    >
-                      {fruit.phases.length} phases
-                    </span>
-                    <span
-                      className={selected === fruit.id ? "text-white/70" : "text-slate-400"}
-                      style={{ fontSize: "0.65rem", marginTop: "2px" }}
-                    >
-                      {fruit.totalTime}h total
-                    </span>
                   </div>
                 </button>
               ))}
@@ -330,44 +180,28 @@ function FruitSelector({
           </div>
         )}
 
-        {/* Citrus Fruits */}
-        {filteredFruits.citrus.length > 0 && (
+        {/* Other Recipes */}
+        {filteredFruits.other.length > 0 && (
           <div>
             <div className="px-2 py-1 mb-1">
               <span className="text-slate-400" style={{ fontSize: "0.68rem", fontWeight: 700, letterSpacing: "0.05em" }}>
-                CITRUS FRUITS
+                OTHER
               </span>
             </div>
             <div className="space-y-0.5">
-              {filteredFruits.citrus.map((fruit) => (
+              {filteredFruits.other.map((fruit) => (
                 <button
                   key={fruit.id}
-                  onClick={() => onSelect(fruit.id)}
+                  onClick={() => onSelect(String(fruit.recipe_id))}
                   className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg transition-all ${
-                    selected === fruit.id
+                    selected === String(fruit.recipe_id)
                       ? "bg-emerald-500 text-white"
                       : "text-slate-700 hover:bg-slate-50"
                   }`}
                 >
                   <div className="flex items-center gap-2">
-                    <Apple size={14} className={selected === fruit.id ? "text-white" : "text-orange-500"} />
+                    <Apple size={14} className={selected === String(fruit.recipe_id) ? "text-white" : "text-slate-500"} />
                     <span style={{ fontSize: "0.8125rem", fontWeight: 600 }}>{fruit.name}</span>
-                  </div>
-                  <div className="flex flex-col items-end">
-                    <span
-                      className={`px-1.5 py-0.5 rounded text-xs ${
-                        selected === fruit.id ? "bg-white/20 text-white" : "bg-slate-100 text-slate-500"
-                      }`}
-                      style={{ fontSize: "0.65rem", fontWeight: 600 }}
-                    >
-                      {fruit.phases.length} phases
-                    </span>
-                    <span
-                      className={selected === fruit.id ? "text-white/70" : "text-slate-400"}
-                      style={{ fontSize: "0.65rem", marginTop: "2px" }}
-                    >
-                      {fruit.totalTime}h total
-                    </span>
                   </div>
                 </button>
               ))}
@@ -390,28 +224,38 @@ function FruitSelector({
   );
 }
 
-function RecipeEditor({ recipe }: { recipe: FruitRecipe }) {
-  const [phases, setPhases] = useState<DryingPhase[]>(recipe.phases);
+function RecipeEditor({ recipe, recipeData }: { recipe: FruitRecipe; recipeData?: any }) {
+  const [phases, setPhases] = useState<DryingPhase[]>(
+    recipeData?.phases && recipeData.phases.length > 0 ? recipeData.phases : recipe.phases
+  );
   const [controlMode, setControlMode] = useState<ControlMode>(recipe.controlMode);
   const [thresholds, setThresholds] = useState<ThresholdRule[]>(recipe.thresholds);
   const [schedules, setSchedules] = useState<TimeSchedule[]>(recipe.schedules);
   const [saved, setSaved] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   // Permission checks
   const canDeleteRecipePhase = usePermission(Permission.DELETE_RECIPE_PHASE);
 
-  // Update state when recipe changes
+  // Sync local state with recipeData when it changes
   useEffect(() => {
-    setPhases(recipe.phases);
-    setControlMode(recipe.controlMode);
-    setThresholds(recipe.thresholds);
-    setSchedules(recipe.schedules);
-  }, [recipe.id]);
+    if (recipeData) {
+      if (recipeData.phases && recipeData.phases.length > 0) {
+        setPhases(recipeData.phases);
+      }
+      if (recipeData.thresholds) {
+        setThresholds(recipeData.thresholds);
+      }
+      if (recipeData.schedules) {
+        setSchedules(recipeData.schedules);
+      }
+    }
+  }, [recipeData]);
 
   const handlePhaseChange = (
     phaseId: string,
     field: keyof DryingPhase,
-    value: string | number,
+    value: string | number | string[],
   ) => {
     setPhases((prev) =>
       prev.map((p) => (p.id === phaseId ? { ...p, [field]: value } : p))
@@ -426,6 +270,10 @@ function RecipeEditor({ recipe }: { recipe: FruitRecipe }) {
       humidity: 45,
       light: 40,
       duration: 4,
+      scheduleType: "fixed",
+      fixedTime: "08:00",
+      recurringInterval: 8,
+      controlDevices: [],
     };
     setPhases([...phases, newPhase]);
   };
@@ -479,18 +327,39 @@ function RecipeEditor({ recipe }: { recipe: FruitRecipe }) {
     setSchedules((prev) => prev.filter((s) => s.id !== id));
   };
 
-  const handleSave = () => {
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2500);
+  const handleSave = async () => {
+    try {
+      setIsSaving(true);
+      // Save recipe data to backend
+      if (recipe.recipe_id) {
+        await catalogAPI.recipes.update(recipe.recipe_id, {
+          phases: phases.map((p) => ({
+            phase_id: p.id,
+            phase_order: phases.indexOf(p) + 1,
+            temperature: p.temperature,
+            humidity: p.humidity,
+            duration_seconds: p.duration * 3600, // convert hours to seconds
+            schedule_type: p.scheduleType,
+            fixed_time: p.scheduleType === "fixed" ? p.fixedTime : null,
+            recurring_interval: p.scheduleType === "recurring" ? p.recurringInterval : null,
+            control_devices: p.controlDevices,
+          })),
+          thresholds: thresholds,
+          schedules: schedules,
+          controlMode: controlMode,
+        });
+      }
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+    } catch (error) {
+      console.error("Error saving recipe:", error);
+      alert("Lỗi lưu recipe. Vui lòng thử lại.");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const totalTime = phases.reduce((sum, p) => sum + p.duration, 0);
-
-  const controlModeConfig = {
-    manual: { label: "Manual", icon: <Hand size={14} />, color: "#64748b", desc: "Manually adjust all parameters" },
-    threshold: { label: "Threshold-based", icon: <Gauge size={14} />, color: "#f59e0b", desc: "Automatic control based on sensor readings" },
-    time: { label: "Time-based", icon: <Clock size={14} />, color: "#3b82f6", desc: "Scheduled automation at set times" },
-  };
 
   return (
     <div className="space-y-5">
@@ -531,36 +400,35 @@ function RecipeEditor({ recipe }: { recipe: FruitRecipe }) {
             <div key={phase.id} className="flex items-center gap-2">
               <div className="flex flex-col items-center min-w-[140px]">
                 <div className="w-full bg-slate-50 rounded-lg border border-slate-200 p-2.5">
-                  <div className="text-center mb-1.5">
+                  <div className="text-center mb-2">
                     <span className="text-slate-800" style={{ fontSize: "0.75rem", fontWeight: 700 }}>
                       {phase.name}
                     </span>
                   </div>
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between">
-                      <span className="text-slate-500" style={{ fontSize: "0.68rem" }}>Temp:</span>
-                      <span className="text-orange-600" style={{ fontSize: "0.72rem", fontWeight: 600 }}>
-                        {phase.temperature}°C
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-slate-500" style={{ fontSize: "0.68rem" }}>Humid:</span>
-                      <span className="text-blue-600" style={{ fontSize: "0.72rem", fontWeight: 600 }}>
-                        {phase.humidity}%
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-slate-500" style={{ fontSize: "0.68rem" }}>Light:</span>
-                      <span className="text-yellow-600" style={{ fontSize: "0.72rem", fontWeight: 600 }}>
-                        {phase.light}%
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-slate-500" style={{ fontSize: "0.68rem" }}>Time:</span>
-                      <span className="text-slate-700" style={{ fontSize: "0.72rem", fontWeight: 600 }}>
-                        {phase.duration}h
-                      </span>
-                    </div>
+                  {/* Control Devices Icons */}
+                  <div className="flex items-center justify-center gap-2 mb-2 min-h-[24px]">
+                    {phase.controlDevices && phase.controlDevices.length > 0 ? (
+                      <>
+                        {phase.controlDevices.includes("fan") && (
+                          <div title="Fan">
+                            <Wind size={16} className="text-amber-500" />
+                          </div>
+                        )}
+                        {phase.controlDevices.includes("lamp") && (
+                          <div title="Lamp">
+                            <Lightbulb size={16} className="text-yellow-500" />
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <span className="text-slate-400" style={{ fontSize: "0.65rem" }}>No devices</span>
+                    )}
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-500" style={{ fontSize: "0.68rem" }}>Time:</span>
+                    <span className="text-slate-700" style={{ fontSize: "0.72rem", fontWeight: 600 }}>
+                      {phase.duration}h
+                    </span>
                   </div>
                 </div>
               </div>
@@ -580,11 +448,32 @@ function RecipeEditor({ recipe }: { recipe: FruitRecipe }) {
           </h3>
           <button
             onClick={handleSave}
-            className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-lg shadow-sm transition-all"
+            disabled={isSaving}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg shadow-sm transition-all ${
+              isSaving 
+                ? "bg-slate-300 text-slate-500 cursor-not-allowed" 
+                : saved
+                ? "bg-emerald-500 text-white"
+                : "bg-emerald-500 hover:bg-emerald-600 text-white"
+            }`}
             style={{ fontSize: "0.8125rem", fontWeight: 600 }}
           >
-            {saved ? <CheckCircle2 size={14} /> : <Save size={14} />}
-            {saved ? "Saved!" : "Save Recipe"}
+            {isSaving ? (
+              <>
+                <Loader2 size={14} className="animate-spin" />
+                Saving...
+              </>
+            ) : saved ? (
+              <>
+                <CheckCircle2 size={14} />
+                Saved!
+              </>
+            ) : (
+              <>
+                <Save size={14} />
+                Save Recipe
+              </>
+            )}
           </button>
         </div>
 
@@ -624,62 +513,6 @@ function RecipeEditor({ recipe }: { recipe: FruitRecipe }) {
 
             {/* Phase Controls */}
             <div className="p-4 space-y-4">
-              {/* Temperature */}
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <Thermometer size={14} className="text-orange-500" />
-                    <span className="text-slate-700" style={{ fontSize: "0.8125rem", fontWeight: 600 }}>
-                      Temperature
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="number"
-                      value={phase.temperature}
-                      onChange={(e) => handlePhaseChange(phase.id, "temperature", Number(e.target.value))}
-                      className="w-16 px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-orange-400 text-right"
-                      style={{ fontSize: "0.8125rem", fontWeight: 700 }}
-                      min={20}
-                      max={100}
-                    />
-                    <span className="text-slate-400" style={{ fontSize: "0.78rem" }}>°C</span>
-                  </div>
-                </div>
-                <div className="flex justify-between mt-1">
-                  <span className="text-slate-400" style={{ fontSize: "0.7rem" }}>20°C</span>
-                  <span className="text-slate-400" style={{ fontSize: "0.7rem" }}>100°C</span>
-                </div>
-              </div>
-
-              {/* Humidity */}
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <Droplets size={14} className="text-blue-500" />
-                    <span className="text-slate-700" style={{ fontSize: "0.8125rem", fontWeight: 600 }}>
-                      Humidity
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="number"
-                      value={phase.humidity}
-                      onChange={(e) => handlePhaseChange(phase.id, "humidity", Number(e.target.value))}
-                      className="w-16 px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-400 text-right"
-                      style={{ fontSize: "0.8125rem", fontWeight: 700 }}
-                      min={10}
-                      max={100}
-                    />
-                    <span className="text-slate-400" style={{ fontSize: "0.78rem" }}>%</span>
-                  </div>
-                </div>
-                <div className="flex justify-between mt-1">
-                  <span className="text-slate-400" style={{ fontSize: "0.7rem" }}>10%</span>
-                  <span className="text-slate-400" style={{ fontSize: "0.7rem" }}>100%</span>
-                </div>
-              </div>
-
               {/* Duration */}
               <div>
                 <div className="flex items-center justify-between mb-2">
@@ -709,31 +542,110 @@ function RecipeEditor({ recipe }: { recipe: FruitRecipe }) {
                 </div>
               </div>
 
-              {/* Light */}
-              <div>
+              {/* Schedule Type */}
+              <div className="pt-2 border-t border-slate-100">
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
-                    <Sun size={14} className="text-yellow-500" />
+                    <Calendar size={14} className="text-slate-500" />
                     <span className="text-slate-700" style={{ fontSize: "0.8125rem", fontWeight: 600 }}>
-                      Light Intensity
+                      Schedule Type
                     </span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="number"
-                      value={phase.light}
-                      onChange={(e) => handlePhaseChange(phase.id, "light", Number(e.target.value))}
-                      className="w-16 px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-yellow-400 text-right"
-                      style={{ fontSize: "0.8125rem", fontWeight: 700 }}
-                      min={0}
-                      max={100}
-                    />
-                    <span className="text-slate-400" style={{ fontSize: "0.78rem" }}>%</span>
-                  </div>
+                  <select
+                    value={phase.scheduleType}
+                    onChange={(e) => handlePhaseChange(phase.id, "scheduleType", e.target.value)}
+                    className="px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-emerald-400"
+                    style={{ fontSize: "0.75rem", fontWeight: 600 }}
+                  >
+                    <option value="fixed">Fixed Time</option>
+                    <option value="recurring">Recurring</option>
+                  </select>
                 </div>
-                <div className="flex justify-between mt-1">
-                  <span className="text-slate-400" style={{ fontSize: "0.7rem" }}>0%</span>
-                  <span className="text-slate-400" style={{ fontSize: "0.7rem" }}>100%</span>
+              </div>
+
+              {/* Fixed Time Schedule */}
+              {phase.scheduleType === "fixed" && (
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <Clock size={14} className="text-emerald-500" />
+                      <span className="text-slate-700" style={{ fontSize: "0.8125rem", fontWeight: 600 }}>
+                        Start Time (Daily)
+                      </span>
+                    </div>
+                    <input
+                      type="time"
+                      value={phase.fixedTime || "08:00"}
+                      onChange={(e) => handlePhaseChange(phase.id, "fixedTime", e.target.value)}
+                      className="px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-emerald-400"
+                      style={{ fontSize: "0.75rem" }}
+                    />
+                  </div>
+                  <p className="text-slate-500" style={{ fontSize: "0.7rem" }}>Phase will run every day at this time</p>
+                </div>
+              )}
+
+              {/* Recurring Interval Schedule */}
+              {phase.scheduleType === "recurring" && (
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <Zap size={14} className="text-amber-500" />
+                      <span className="text-slate-700" style={{ fontSize: "0.8125rem", fontWeight: 600 }}>
+                        Recurring Interval
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        value={phase.recurringInterval || 8}
+                        onChange={(e) => handlePhaseChange(phase.id, "recurringInterval", Number(e.target.value))}
+                        className="w-20 px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-amber-400 text-right"
+                        style={{ fontSize: "0.75rem", fontWeight: 600 }}
+                        min={1}
+                        max={24}
+                      />
+                      <span className="text-slate-400" style={{ fontSize: "0.75rem" }}>hours</span>
+                    </div>
+                  </div>
+                  <p className="text-slate-500" style={{ fontSize: "0.7rem" }}>Phase will run every {phase.recurringInterval || 8} hours</p>
+                </div>
+              )}
+
+              {/* Control Devices */}
+              <div className="pt-2 border-t border-slate-100">
+                <div className="flex items-center gap-2 mb-2">
+                  <Cpu size={14} className="text-slate-500" />
+                  <span className="text-slate-700" style={{ fontSize: "0.8125rem", fontWeight: 600 }}>
+                    Control Devices
+                  </span>
+                </div>
+                <div className="space-y-1.5">
+                  {phase.controlDevices.length === 0 ? (
+                    <p className="text-slate-400 text-xs italic">No devices assigned. Map devices in the panel below.</p>
+                  ) : (
+                    <div className="space-y-1">
+                      {phase.controlDevices.map((deviceId) => (
+                        <div key={deviceId} className="flex items-center justify-between bg-slate-50 px-2.5 py-1.5 rounded-lg border border-slate-200">
+                          <span className="text-slate-700" style={{ fontSize: "0.75rem", fontWeight: 600 }}>
+                            Device {deviceId}
+                          </span>
+                          <button
+                            onClick={() =>
+                              handlePhaseChange(
+                                phase.id,
+                                "controlDevices",
+                                phase.controlDevices.filter((d) => d !== deviceId)
+                              )
+                            }
+                            className="text-slate-400 hover:text-red-500 transition-all"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -759,10 +671,87 @@ function RecipeEditor({ recipe }: { recipe: FruitRecipe }) {
 }
 
 export function AutomationRules() {
-  const [selectedFruit, setSelectedFruit] = useState<string | null>("mango");
+  const [recipes, setRecipes] = useState<FruitRecipe[]>([]);
+  const [selectedFruit, setSelectedFruit] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [selectedRecipeId, setSelectedRecipeId] = useState<number | null>(null);
+  const [selectedRecipeData, setSelectedRecipeData] = useState<any>(null);
+  const [loadingRecipe, setLoadingRecipe] = useState(false);
 
-  const selectedRecipe = fruitRecipes.find((f) => f.id === selectedFruit);
+  // Fetch recipes list on component mount
+  useEffect(() => {
+    const loadRecipes = async () => {
+      try {
+        setLoading(true);
+        const response = await catalogAPI.recipes.list();
+        // Transform API response to FruitRecipe format
+        const transformedRecipes = (response.data || []).map((recipe: any) => ({
+          id: String(recipe.recipe_id),
+          name: recipe.recipe_name,
+          category: recipe.fruit_id ? "tropical" : "other", // simplified categorization
+          phases: recipe.phases || [],
+          totalTime: recipe.phases?.reduce((sum: number, p: any) => sum + (p.duration || 0), 0) || 0,
+          controlMode: "threshold" as ControlMode,
+          thresholds: [],
+          schedules: [],
+          recipe_id: recipe.recipe_id,
+        }));
+        setRecipes(transformedRecipes);
+        if (transformedRecipes.length > 0) {
+          setSelectedFruit(String(transformedRecipes[0].recipe_id));
+          setSelectedRecipeId(transformedRecipes[0].recipe_id);
+        }
+      } catch (error) {
+        console.error("Error loading recipes:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadRecipes();
+  }, []);
+
+  // Fetch selected recipe details
+  useEffect(() => {
+    if (!selectedRecipeId) return;
+
+    const loadRecipeDetails = async () => {
+      try {
+        setLoadingRecipe(true);
+        const response = await catalogAPI.recipes.get(selectedRecipeId);
+        if (response.data) {
+          // Transform phases to DryingPhase format
+          const transformedData = {
+            ...response.data,
+            phases: transformApiPhases(response.data.phases),
+          };
+          setSelectedRecipeData(transformedData);
+        }
+      } catch (error) {
+        console.error("Error loading recipe details:", error);
+      } finally {
+        setLoadingRecipe(false);
+      }
+    };
+
+    loadRecipeDetails();
+  }, [selectedRecipeId]);
+
+  const selectedRecipe = recipes.find((f) => String(f.recipe_id) === selectedFruit);
+
+  if (loading) {
+    return (
+      <div className="flex-1 overflow-y-auto bg-slate-50 p-6">
+        <div className="max-w-screen-xl mx-auto flex items-center justify-center min-h-96">
+          <div className="flex flex-col items-center gap-3">
+            <Loader2 size={32} className="text-emerald-500 animate-spin" />
+            <p className="text-slate-600" style={{ fontSize: "0.875rem" }}>Loading recipes...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 overflow-y-auto bg-slate-50 p-6">
@@ -786,17 +775,29 @@ export function AutomationRules() {
           <div className="w-72 shrink-0" style={{ minHeight: "500px" }}>
             <FruitSelector
               selected={selectedFruit}
-              onSelect={setSelectedFruit}
+              onSelect={(recipeId) => {
+                setSelectedFruit(recipeId);
+                const recipe = recipes.find((r) => String(r.recipe_id) === recipeId);
+                if (recipe?.recipe_id) {
+                  setSelectedRecipeId(recipe.recipe_id);
+                }
+              }}
               search={searchQuery}
               onSearch={setSearchQuery}
+              recipes={recipes}
             />
           </div>
 
           {/* Right: Recipe Editor (2/3) */}
           <div className="flex-1 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
             <div className="p-6">
-              {selectedRecipe ? (
-                <RecipeEditor recipe={selectedRecipe} />
+              {loadingRecipe ? (
+                <div className="flex flex-col items-center justify-center py-20 gap-3">
+                  <Loader2 size={32} className="text-emerald-500 animate-spin" />
+                  <p className="text-slate-600" style={{ fontSize: "0.875rem" }}>Loading recipe details...</p>
+                </div>
+              ) : selectedRecipe ? (
+                <RecipeEditor recipe={selectedRecipe} recipeData={selectedRecipeData} />
               ) : (
                 <div className="text-center py-20 text-slate-400">
                   <Apple size={48} className="mx-auto mb-3 opacity-30" />

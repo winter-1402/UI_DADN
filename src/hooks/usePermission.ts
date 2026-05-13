@@ -56,27 +56,3 @@ export const useCurrentUser = () => {
   const { user } = useAuth();
   return user;
 };
-
-/**
- * Hook to check factory access
- */
-export const useCanAccessFactory = (factoryId: string): boolean => {
-  const { canAccessFactory } = useAuth();
-  return canAccessFactory(factoryId);
-};
-
-/**
- * Hook to check area access
- */
-export const useCanAccessArea = (areaId: string): boolean => {
-  const { canAccessArea } = useAuth();
-  return canAccessArea(areaId);
-};
-
-/**
- * Hook to check dryer access
- */
-export const useCanAccessDryer = (dryerId: string): boolean => {
-  const { canAccessDryer } = useAuth();
-  return canAccessDryer(dryerId);
-};

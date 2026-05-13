@@ -10,24 +10,13 @@ import {
   ResponsiveContainer,
   ReferenceLine,
 } from "recharts";
-import { CalendarDays, TrendingUp } from "lucide-react";
+import { CalendarDays, TrendingUp, Loader, AlertTriangle } from "lucide-react";
+import { monitoringAPI } from "../config/api.config";
 
-function generateHourlyData(hours = 24) {
-  const data = [];
-  const now = new Date();
-  for (let i = hours; i >= 0; i--) {
-    const t = new Date(now.getTime() - i * 60 * 60 * 1000);
-    const label = t.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-    const baseTemp = 63 + Math.sin((i / 24) * Math.PI * 2) * 8;
-    const baseHumid = 46 - Math.sin((i / 24) * Math.PI * 2) * 10;
-    data.push({
-      idx: hours - i,       // unique numeric index — used as XAxis dataKey
-      time: label,          // kept for display via tickFormatter
-      temperature: parseFloat((baseTemp + (Math.random() - 0.5) * 4).toFixed(1)),
-      humidity: parseFloat((baseHumid + (Math.random() - 0.5) * 3).toFixed(1)),
-    });
-  }
-  return data;
+interface TrendChartProps {
+  dryId?: number; // Machine/Dryer ID for sensor data
+  machineLabel?: string; // Display label for the machine
+  onDataLoaded?: (data: any[]) => void; // Callback to pass chart data back
 }
 
 const CustomTooltip = ({ active, payload, label }: any) => {
@@ -62,14 +51,54 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   return null;
 };
 
-export function TrendChart() {
+export function TrendChart({ dryId, machineLabel, onDataLoaded }: TrendChartProps) {
   const [range, setRange] = useState("24h");
-  const [data, setData] = useState(generateHourlyData(24));
+  const [data, setData] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
+  // Fetch sensor data from dryer endpoint
   useEffect(() => {
-    const hours = range === "6h" ? 6 : range === "12h" ? 12 : 24;
-    setData(generateHourlyData(hours));
-  }, [range]);
+    if (!dryId) {
+      setError("Machine ID is required to display sensor data");
+      setData([]);
+      return;
+    }
+
+    const fetchChartData = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+
+        // Fetch temperature and humidity data from dashboard charts API with dry_id
+        const response = await monitoringAPI.charts.temperatureHumidity({ dryId });
+        const chartData = response?.data ?? response ?? [];
+
+        // Transform API data to chart format
+        if (Array.isArray(chartData)) {
+          const transformedData = chartData.map((point: any, idx: number) => ({
+            idx,
+            time: point.time ? new Date(point.time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : `${idx}`,
+            temperature: point.temperature ?? 0,
+            humidity: point.humidity ?? 0,
+          }));
+          setData(transformedData);
+          onDataLoaded?.(transformedData);
+        } else {
+          setError("Invalid chart data format");
+          setData([]);
+        }
+      } catch (err) {
+        console.error("Error fetching chart data:", err);
+        setError(err instanceof Error ? err.message : "Failed to load chart data");
+        setData([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchChartData();
+  }, [dryId, range]);
 
   // Show every Nth label to avoid crowding
   const tickInterval = range === "6h" ? 0 : range === "12h" ? 1 : 3;
@@ -83,7 +112,7 @@ export function TrendChart() {
             Temp & Humidity Trends
           </h2>
           <p className="text-slate-400" style={{ fontSize: "0.75rem" }}>
-            Machine #01 — Environmental tracking
+            {machineLabel ? `${machineLabel} — Sensor tracking` : "Environmental tracking"}
           </p>
         </div>
         {/* Date Range Dropdown */}
@@ -102,7 +131,23 @@ export function TrendChart() {
         </div>
       </div>
 
+      {/* Error State */}
+      {error && (
+        <div className="flex items-center gap-2 mb-4 p-3 bg-red-50 rounded-lg border border-red-200">
+          <AlertTriangle size={16} className="text-red-500" />
+          <span className="text-red-700" style={{ fontSize: "0.8rem" }}>{error}</span>
+        </div>
+      )}
+
+      {/* Loading State */}
+      {loading && (
+        <div className="flex items-center justify-center h-[220px]">
+          <Loader size={24} className="text-emerald-500 animate-spin" />
+        </div>
+      )}
+
       {/* Summary pills */}
+      {!loading && data.length > 0 && (
       <div className="flex items-center gap-3 mb-4">
         <div className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-50 rounded-lg border border-orange-100">
           <TrendingUp size={12} className="text-orange-500" />
@@ -117,8 +162,10 @@ export function TrendChart() {
           </span>
         </div>
       </div>
+      )}
 
       {/* Chart */}
+      {!loading && data.length > 0 && (
       <ResponsiveContainer width="100%" height={220}>
         <LineChart data={data} margin={{ top: 5, right: 10, left: -15, bottom: 5 }}>
           <defs>
@@ -197,6 +244,7 @@ export function TrendChart() {
           />
         </LineChart>
       </ResponsiveContainer>
+      )}
     </div>
   );
 }

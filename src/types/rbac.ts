@@ -4,13 +4,6 @@ export enum UserRole {
   ADMIN = "admin",
 }
 
-// Scope levels for users
-export enum ScopeLevel {
-  FACTORY = "factory",
-  AREA = "area",
-  DRYER = "dryer",
-}
-
 // Permissions based on roles
 export enum Permission {
   // Dashboard & Monitoring
@@ -83,24 +76,19 @@ export const rolePermissions: Record<UserRole, Permission[]> = {
   ],
 };
 
-// User scope configuration
-export interface UserScope {
-  level: ScopeLevel;
-  factoryId?: string;
-  areaId?: string;
-  dryerId?: string;
+// API Response - Direct from backend
+export interface APIUser {
+  app_user_id: number;
+  app_user_name: string;
+  email: string;
+  is_admin: boolean;
+  is_active: boolean;
+  created_at: string;
 }
 
-// User type
-export interface User {
-  id: string;
-  email: string;
-  fullName: string;
-  role: UserRole;
-  scope: UserScope;
-  active: boolean;
-  createdAt: Date;
-  updatedAt: Date;
+// User type - Internal representation with computed role
+export interface User extends APIUser {
+  role: UserRole; // Computed from is_admin
 }
 
 // Auth state
@@ -116,7 +104,4 @@ export interface AuthContextType extends AuthState {
   logout: () => void;
   hasPermission: (permission: Permission) => boolean;
   hasRole: (role: UserRole) => boolean;
-  canAccessFactory: (factoryId: string) => boolean;
-  canAccessArea: (areaId: string) => boolean;
-  canAccessDryer: (dryerId: string) => boolean;
 }

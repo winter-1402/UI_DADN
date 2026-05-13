@@ -1,7 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { toast } from "sonner";
 import { Button } from "@/app/components/ui/button";
 import { Card } from "@/app/components/ui/card";
 import { Input } from "@/app/components/ui/input";
+import { Switch } from "@/app/components/ui/switch";
 import { AdminOnly } from "@/components/permission/PermissionGuards";
 import {
   Table,
@@ -19,62 +21,83 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/app/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/app/components/ui/select";
-import { User, UserRole, ScopeLevel } from "@/types/rbac";
+import { User, UserRole, APIUser } from "@/types/rbac";
 import { Trash2, Edit2, Plus } from "lucide-react";
+import { userAPI } from "../../config/api.config";
+
+const toUser = (u: APIUser): User => ({
+  ...u,
+  role: u.is_admin ? UserRole.ADMIN : UserRole.USER,
+});
 
 export function UserManagement() {
-  // Mock data - replace with API calls
-  const [users, setUsers] = useState<User[]>([
-    {
-      id: "1",
-      email: "admin@example.com",
-      fullName: "Admin User",
-      role: UserRole.ADMIN,
-      scope: {
-        level: ScopeLevel.FACTORY,
-        factoryId: "factory-1",
-      },
-      active: true,
-      createdAt: new Date("2024-01-01"),
-      updatedAt: new Date("2024-01-01"),
-    },
-    {
-      id: "2",
-      email: "user@example.com",
-      fullName: "Regular User",
-      role: UserRole.USER,
-      scope: {
-        level: ScopeLevel.AREA,
-        factoryId: "factory-1",
-        areaId: "area-1",
-      },
-      active: true,
-      createdAt: new Date("2024-01-15"),
-      updatedAt: new Date("2024-01-15"),
-    },
-  ]);
+  const [users, setUsers] = useState<User[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [togglingId, setTogglingId] = useState<number | null>(null);
 
   const [formData, setFormData] = useState({
     email: "",
-    fullName: "",
-    role: UserRole.USER,
-    scopeLevel: ScopeLevel.AREA,
-    factoryId: "factory-1",
-    areaId: "area-1",
+    app_user_name: "",
+    is_admin: false,
   });
 
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<number | null>(null);
   const [isOpen, setIsOpen] = useState(false);
 
+  const fetchUsers = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const response = await userAPI.list();
+      const list: APIUser[] = response?.data ?? response ?? [];
+      setUsers(list.map(toUser));
+    } catch (error) {
+      console.error("Failed to fetch users:", error);
+      const message =
+        error instanceof Error ? error.message : "Không tải được danh sách người dùng";
+      toast.error(message);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchUsers();
+  }, [fetchUsers]);
+
+  const handleToggleActive = async (user: User, nextActive: boolean) => {
+    setTogglingId(user.app_user_id);
+    // Optimistic UI update
+    setUsers((prev) =>
+      prev.map((u) =>
+        u.app_user_id === user.app_user_id ? { ...u, is_active: nextActive } : u
+      )
+    );
+    try {
+      await userAPI.update(user.app_user_id, { is_active: nextActive });
+      toast.success(
+        nextActive
+          ? `Đã kích hoạt ${user.email}`
+          : `Đã vô hiệu hoá ${user.email}`
+      );
+      // Reload from server to keep client/source-of-truth in sync
+      await fetchUsers();
+    } catch (error) {
+      // Rollback optimistic change
+      setUsers((prev) =>
+        prev.map((u) =>
+          u.app_user_id === user.app_user_id ? { ...u, is_active: !nextActive } : u
+        )
+      );
+      const message =
+        error instanceof Error ? error.message : "Cập nhật trạng thái thất bại";
+      toast.error(message);
+    } finally {
+      setTogglingId(null);
+    }
+  };
+  
   const handleAddUser = () => {
-    if (!formData.email || !formData.fullName) {
+    if (!formData.email || !formData.app_user_name) {
       alert("Vui lòng điền đầy đủ thông tin");
       return;
     }
@@ -82,18 +105,13 @@ export function UserManagement() {
     if (editingId) {
       setUsers(
         users.map((u) =>
-          u.id === editingId
+          u.app_user_id === editingId
             ? {
                 ...u,
                 email: formData.email,
-                fullName: formData.fullName,
-                role: formData.role as UserRole,
-                scope: {
-                  level: formData.scopeLevel as ScopeLevel,
-                  factoryId: formData.factoryId,
-                  areaId: formData.scopeLevel === ScopeLevel.AREA ? formData.areaId : undefined,
-                },
-                updatedAt: new Date(),
+                app_user_name: formData.app_user_name,
+                is_admin: formData.is_admin,
+                role: formData.is_admin ? UserRole.ADMIN : UserRole.USER,
               }
             : u
         )
@@ -101,18 +119,13 @@ export function UserManagement() {
       setEditingId(null);
     } else {
       const newUser: User = {
-        id: String(Math.random()),
+        app_user_id: Math.max(...users.map((u) => u.app_user_id), 0) + 1,
+        app_user_name: formData.app_user_name,
         email: formData.email,
-        fullName: formData.fullName,
-        role: formData.role as UserRole,
-        scope: {
-          level: formData.scopeLevel as ScopeLevel,
-          factoryId: formData.factoryId,
-          areaId: formData.scopeLevel === ScopeLevel.AREA ? formData.areaId : undefined,
-        },
-        active: true,
-        createdAt: new Date(),
-        updatedAt: new Date(),
+        is_admin: formData.is_admin,
+        is_active: true,
+        created_at: new Date().toISOString(),
+        role: formData.is_admin ? UserRole.ADMIN : UserRole.USER,
       };
       setUsers([...users, newUser]);
     }
@@ -120,11 +133,8 @@ export function UserManagement() {
     // Reset form
     setFormData({
       email: "",
-      fullName: "",
-      role: UserRole.USER,
-      scopeLevel: ScopeLevel.AREA,
-      factoryId: "factory-1",
-      areaId: "area-1",
+      app_user_name: "",
+      is_admin: false,
     });
     setIsOpen(false);
   };
@@ -132,19 +142,16 @@ export function UserManagement() {
   const handleEdit = (user: User) => {
     setFormData({
       email: user.email,
-      fullName: user.fullName,
-      role: user.role,
-      scopeLevel: user.scope.level,
-      factoryId: user.scope.factoryId || "factory-1",
-      areaId: user.scope.areaId || "area-1",
+      app_user_name: user.app_user_name,
+      is_admin: user.is_admin,
     });
-    setEditingId(user.id);
+    setEditingId(user.app_user_id);
     setIsOpen(true);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = (id: number) => {
     if (confirm("Bạn có chắc muốn xóa người dùng này?")) {
-      setUsers(users.filter((u) => u.id !== id));
+      setUsers(users.filter((u) => u.app_user_id !== id));
     }
   };
 
@@ -153,11 +160,8 @@ export function UserManagement() {
     setEditingId(null);
     setFormData({
       email: "",
-      fullName: "",
-      role: UserRole.USER,
-      scopeLevel: ScopeLevel.AREA,
-      factoryId: "factory-1",
-      areaId: "area-1",
+      app_user_name: "",
+      is_admin: false,
     });
   };
 
@@ -178,7 +182,7 @@ export function UserManagement() {
               Quản lý Người dùng
             </h2>
             <p className="text-slate-600 mt-2">
-              Quản lý tài khoản người dùng, vai trò và phạm vi truy cập
+              Quản lý tài khoản người dùng và phân quyền
             </p>
           </div>
           <Dialog open={isOpen} onOpenChange={setIsOpen}>
@@ -214,79 +218,31 @@ export function UserManagement() {
 
                 <div>
                   <label className="block text-sm font-medium mb-1">
-                    Họ tên
+                    Tên người dùng
                   </label>
                   <Input
-                    value={formData.fullName}
+                    value={formData.app_user_name}
                     onChange={(e) =>
-                      setFormData({ ...formData, fullName: e.target.value })
+                      setFormData({ ...formData, app_user_name: e.target.value })
                     }
                     placeholder="Nguyễn Văn A"
                   />
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium mb-1">
-                    Vai trò
-                  </label>
-                  <Select value={formData.role} onValueChange={(value) =>
-                    setFormData({
-                      ...formData,
-                      role: value as UserRole,
-                    })
-                  }>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value={UserRole.USER}>User</SelectItem>
-                      <SelectItem value={UserRole.ADMIN}>Admin</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium mb-1">
-                    Phạm vi truy cập
-                  </label>
-                  <Select
-                    value={formData.scopeLevel}
-                    onValueChange={(value) =>
-                      setFormData({
-                        ...formData,
-                        scopeLevel: value as ScopeLevel,
-                      })
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="is_admin"
+                    checked={formData.is_admin}
+                    onChange={(e) =>
+                      setFormData({ ...formData, is_admin: e.target.checked })
                     }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value={ScopeLevel.FACTORY}>
-                        Toàn nhà máy
-                      </SelectItem>
-                      <SelectItem value={ScopeLevel.AREA}>Khu vực</SelectItem>
-                      <SelectItem value={ScopeLevel.DRYER}>
-                        Máy sấy
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
+                    className="w-4 h-4 cursor-pointer"
+                  />
+                  <label htmlFor="is_admin" className="text-sm font-medium cursor-pointer">
+                    Cấp quyền Admin
+                  </label>
                 </div>
-
-                {formData.scopeLevel === ScopeLevel.AREA && (
-                  <div>
-                    <label className="block text-sm font-medium mb-1">
-                      Khu vực
-                    </label>
-                    <Input
-                      value={formData.areaId}
-                      onChange={(e) =>
-                        setFormData({ ...formData, areaId: e.target.value })
-                      }
-                      placeholder="area-1"
-                    />
-                  </div>
-                )}
 
                 <div className="flex gap-2 justify-end pt-4">
                   <Button
@@ -310,50 +266,68 @@ export function UserManagement() {
               <TableHeader>
                 <TableRow className="bg-slate-50">
                   <TableHead>Email</TableHead>
-                  <TableHead>Họ tên</TableHead>
+                  <TableHead>Tên người dùng</TableHead>
                   <TableHead>Vai trò</TableHead>
-                  <TableHead>Phạm vi</TableHead>
                   <TableHead>Trạng thái</TableHead>
+                  <TableHead>Ngày tạo</TableHead>
                   <TableHead>Thao tác</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
+                {isLoading && users.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center text-slate-500 py-6">
+                      Đang tải dữ liệu...
+                    </TableCell>
+                  </TableRow>
+                )}
+                {!isLoading && users.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center text-slate-500 py-6">
+                      Chưa có người dùng nào
+                    </TableCell>
+                  </TableRow>
+                )}
                 {users.map((user) => (
-                  <TableRow key={user.id}>
+                  <TableRow key={user.app_user_id}>
                     <TableCell className="font-medium">
                       {user.email}
                     </TableCell>
-                    <TableCell>{user.fullName}</TableCell>
+                    <TableCell>{user.app_user_name}</TableCell>
                     <TableCell>
                       <span
                         className={`px-2 py-1 rounded text-xs font-medium ${
-                          user.role === UserRole.ADMIN
+                          user.is_admin
                             ? "bg-purple-100 text-purple-700"
                             : "bg-blue-100 text-blue-700"
                         }`}
                       >
-                        {user.role === UserRole.ADMIN ? "Admin" : "User"}
+                        {user.is_admin ? "Admin" : "User"}
                       </span>
                     </TableCell>
                     <TableCell>
-                      <span className="text-sm">
-                        {user.scope.level === ScopeLevel.FACTORY
-                          ? "Toàn nhà máy"
-                          : user.scope.level === ScopeLevel.AREA
-                            ? `Khu vực (${user.scope.areaId})`
-                            : `Máy sấy (${user.scope.dryerId})`}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <Switch
+                          checked={user.is_active}
+                          disabled={togglingId === user.app_user_id}
+                          onCheckedChange={(checked) =>
+                            handleToggleActive(user, checked)
+                          }
+                          aria-label={`Toàn trạng thái ${user.email}`}
+                        />
+                        <span
+                          className={`px-2 py-0.5 rounded text-xs font-medium ${
+                            user.is_active
+                              ? "bg-green-100 text-green-700"
+                              : "bg-red-100 text-red-700"
+                          }`}
+                        >
+                          {user.is_active ? "Hoạt động" : "Không hoạt động"}
+                        </span>
+                      </div>
                     </TableCell>
                     <TableCell>
-                      <span
-                        className={`px-2 py-1 rounded text-xs font-medium ${
-                          user.active
-                            ? "bg-green-100 text-green-700"
-                            : "bg-red-100 text-red-700"
-                        }`}
-                      >
-                        {user.active ? "Hoạt động" : "Không hoạt động"}
-                      </span>
+                      {new Date(user.created_at).toLocaleDateString("vi-VN")}
                     </TableCell>
                     <TableCell>
                       <div className="flex gap-2">
@@ -369,7 +343,7 @@ export function UserManagement() {
                         <Button
                           size="sm"
                           variant="destructive"
-                          onClick={() => handleDelete(user.id)}
+                          onClick={() => handleDelete(user.app_user_id)}
                           className="gap-1"
                         >
                           <Trash2 className="w-4 h-4" />

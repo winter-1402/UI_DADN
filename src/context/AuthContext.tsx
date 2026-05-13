@@ -2,14 +2,25 @@ import React, { createContext, useContext, useState, useEffect } from "react";
 import {
   AuthContextType,
   AuthState,
-  User,
   UserRole,
   Permission,
-  ScopeLevel,
+  APIUser,
+  User,
   rolePermissions,
 } from "@/types/rbac";
+import { authAPI } from "../app/config/api.config";
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+/**
+ * Convert API User response to internal User object with computed role
+ */
+const mapAPIUserToUser = (apiUser: APIUser): User => {
+  return {
+    ...apiUser,
+    role: apiUser.is_admin ? UserRole.ADMIN : UserRole.USER,
+  };
+};
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
@@ -24,28 +35,36 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   useEffect(() => {
     const initializeAuth = async () => {
       try {
-        const token = localStorage.getItem("authToken");
-        const userData = localStorage.getItem("userData");
+        const token = localStorage.getItem("access_token");
+        const storedUserData = localStorage.getItem("userData");
 
-        if (token && userData) {
-          const user = JSON.parse(userData);
-          setAuthState({
-            user,
-            isAuthenticated: true,
-            isLoading: false,
-          });
-        } else {
-          setAuthState((prev) => ({
-            ...prev,
-            isLoading: false,
-          }));
+        if (!token) {
+          setAuthState({ user: null, isAuthenticated: false, isLoading: false });
+          return;
+        }
+
+        // Optimistically restore user from cache
+        if (storedUserData) {
+          const cachedUser = JSON.parse(storedUserData) as User;
+          setAuthState({ user: cachedUser, isAuthenticated: true, isLoading: true });
+        }
+
+        // Validate token by fetching current user
+        try {
+          const response = await authAPI.getCurrentUser();
+          const apiUser: APIUser = response.data ?? response;
+          const user = mapAPIUserToUser(apiUser);
+          localStorage.setItem("userData", JSON.stringify(user));
+          setAuthState({ user, isAuthenticated: true, isLoading: false });
+        } catch {
+          // Token invalid/expired
+          localStorage.removeItem("access_token");
+          localStorage.removeItem("userData");
+          setAuthState({ user: null, isAuthenticated: false, isLoading: false });
         }
       } catch (error) {
         console.error("Failed to initialize auth:", error);
-        setAuthState((prev) => ({
-          ...prev,
-          isLoading: false,
-        }));
+        setAuthState({ user: null, isAuthenticated: false, isLoading: false });
       }
     };
 
@@ -53,64 +72,46 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   }, []);
 
   const login = async (email: string, password: string): Promise<void> => {
-    setAuthState((prev) => ({ ...prev, isLoading: true }));
-
+    setAuthState((prev: AuthState) => ({ ...prev, isLoading: true }));
     try {
-      // In production, this would be an API call to your backend
-      // For now, we'll simulate authentication
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      // 1. Call POST /auth/login -> { data: { access_token, ... } }
+      const loginResponse = await authAPI.login(email, password);
+      const accessToken: string | undefined =
+        loginResponse?.data?.access_token ?? loginResponse?.access_token;
 
-      // Simulate different users based on email
-      let user: User;
-      if (email.includes("admin")) {
-        user = {
-          id: "1",
-          email,
-          fullName: "Admin User",
-          role: UserRole.ADMIN,
-          scope: {
-            level: ScopeLevel.FACTORY,
-            factoryId: "factory-1",
-          },
-          active: true,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        };
-      } else {
-        user = {
-          id: "2",
-          email,
-          fullName: "Regular User",
-          role: UserRole.USER,
-          scope: {
-            level: ScopeLevel.AREA,
-            factoryId: "factory-1",
-            areaId: "area-1",
-          },
-          active: true,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        };
+      if (!accessToken) {
+        throw new Error("Login response missing access_token");
       }
 
-      // Store in localStorage
-      const token = "token-" + Date.now();
-      localStorage.setItem("authToken", token);
+      // 2. Persist token so subsequent apiRequest calls are authenticated
+      localStorage.setItem("access_token", accessToken);
+      // 3. Resolve current user (prefer payload from login, fallback to /auth/me)
+      let apiUser: APIUser | undefined =
+        loginResponse?.data?.user ?? loginResponse?.user;
+      if (!apiUser) {
+        const meResponse = await authAPI.getCurrentUser();
+        apiUser = meResponse.data ?? meResponse;
+      }
+      if (!apiUser) {
+        throw new Error("Unable to resolve current user");
+      }
+
+      const user = mapAPIUserToUser(apiUser);
       localStorage.setItem("userData", JSON.stringify(user));
 
-      setAuthState({
-        user,
-        isAuthenticated: true,
-        isLoading: false,
-      });
+      setAuthState({ user, isAuthenticated: true, isLoading: false });
     } catch (error) {
-      setAuthState((prev) => ({ ...prev, isLoading: false }));
+      localStorage.removeItem("access_token");
+      localStorage.removeItem("userData");
+      setAuthState({ user: null, isAuthenticated: false, isLoading: false });
       throw error;
     }
   };
 
   const logout = (): void => {
-    localStorage.removeItem("authToken");
+    // Best-effort server-side logout; ignore failures
+    authAPI.logout().catch(() => {});
+    localStorage.removeItem("access_token");
     localStorage.removeItem("userData");
     setAuthState({
       user: null,
@@ -119,73 +120,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     });
   };
 
+  /**
+   * Check if user has a specific role
+   */
+  const hasRole = (role: UserRole): boolean => {
+    if (!authState.user) return false;
+    if (authState.user.role === UserRole.ADMIN) return true;
+    return authState.user.role === role;
+  };
+
+  /**
+   * Check if user has a specific permission
+   */
   const hasPermission = (permission: Permission): boolean => {
     if (!authState.user) return false;
 
-    const userPermissions = rolePermissions[authState.user.role];
-    return userPermissions.includes(permission);
-  };
+    const userRole = authState.user.role;
+    const permissions = rolePermissions[userRole] || [];
 
-  const hasRole = (role: UserRole): boolean => {
-    return authState.user?.role === role;
-  };
-
-  const canAccessFactory = (factoryId: string): boolean => {
-    if (!authState.user) return false;
-    if (authState.user.role === UserRole.ADMIN) return true;
-
-    return (
-      authState.user.scope.level === ScopeLevel.FACTORY &&
-      authState.user.scope.factoryId === factoryId
-    );
-  };
-
-  const canAccessArea = (areaId: string): boolean => {
-    if (!authState.user) return false;
-    if (authState.user.role === UserRole.ADMIN) return true;
-
-    if (
-      authState.user.scope.level === ScopeLevel.AREA &&
-      authState.user.scope.areaId === areaId
-    ) {
-      return true;
-    }
-    if (authState.user.scope.level === ScopeLevel.FACTORY) {
-      return true; // Can access all areas in their factory
-    }
-
-    return false;
-  };
-
-  const canAccessDryer = (dryerId: string): boolean => {
-    if (!authState.user) return false;
-    if (authState.user.role === UserRole.ADMIN) return true;
-
-    if (
-      authState.user.scope.level === ScopeLevel.DRYER &&
-      authState.user.scope.dryerId === dryerId
-    ) {
-      return true;
-    }
-    if (authState.user.scope.level === ScopeLevel.AREA) {
-      return true; // Can access all dryers in their area
-    }
-    if (authState.user.scope.level === ScopeLevel.FACTORY) {
-      return true; // Can access all dryers in their factory
-    }
-
-    return false;
+    return permissions.includes(permission);
   };
 
   const value: AuthContextType = {
     ...authState,
     login,
     logout,
-    hasPermission,
     hasRole,
-    canAccessFactory,
-    canAccessArea,
-    canAccessDryer,
+    hasPermission,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -1,34 +1,24 @@
+import { useEffect, useState } from "react";
+import { Loader2 } from "lucide-react";
+import { monitoringAPI, structureAPI } from "../config/api.config";
 import { StatsCards } from "./StatsCards";
-import { SensorTelemetry } from "./SensorTelemetry";
-import { DeviceControls } from "./DeviceControls";
-import { TrendChart } from "./TrendChart";
 import { EventLogs } from "./EventLogs";
 
 export function Dashboard() {
+ 
   return (
-    <div className="flex-1 overflow-y-auto bg-slate-50 p-6">
-      <div className="max-w-screen-xl mx-auto space-y-5">
+    <div className="flex-1 overflow-y-auto bg-slate-50 p-4">
+      <div className="max-w-screen-xl mx-auto space-y-4">
         {/* Row 1: KPI Cards */}
         <section>
-          <h2 className="text-lg font-bold text-slate-900 mb-4">Factory Overview</h2>
+          <h2 className="text-lg font-bold text-slate-900 mb-2">Factory Overview</h2>
           <StatsCards />
-        </section>
-
-        {/* Row 2: Sensor Telemetry + Device Controls */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-          <SensorTelemetry />
-          <DeviceControls />
-        </div>
-
-        {/* Row 3: Trend Chart + Event Logs */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-          <div className="lg:col-span-2">
-            <TrendChart />
-          </div>
-          <div className="lg:col-span-1">
-            <EventLogs />
-          </div>
-        </div>
+        </section> 
+          <section className="bg-white rounded-xl p-5 shadow-sm">
+              <h2 className="text-lg font-bold text-slate-900">Operations Report Overview</h2>
+              <EventLogs />
+          </section>
+ 
       </div>
     </div>
   );

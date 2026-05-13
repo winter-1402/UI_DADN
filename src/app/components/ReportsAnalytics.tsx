@@ -1,20 +1,11 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 export function useIsAdmin() {
   // Tạm thời hardcode trả về true để bạn có thể xem được 
   // toàn bộ các menu của Admin trong quá trình thiết kế UI.
   // Sau này khi team Backend (Hiếu, Huy) làm phân quyền xong thì sẽ thay đổi logic ở đây.
   return true; 
 }
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-} from "recharts";
+import {TrendChart} from "./TrendChart";
 import {
   Download,
   ChevronDown,
@@ -39,7 +30,9 @@ import {
   Cpu,
   User,
   Search,
+  Loader,
 } from "lucide-react";
+import { monitoringAPI } from "../config/api.config";
 
 // ── Data Generation ──────────────────────────────────────────────────────────
 
@@ -65,6 +58,7 @@ type ActionCategory = "parameter" | "batch" | "sensor" | "machine";
 interface ActivityLog {
   id: number;
   datetime: string;
+  logStyle: string;
   zoneMachine: string;
   eventType: EventType;
   category: ActionCategory;
@@ -72,38 +66,120 @@ interface ActivityLog {
   details: string;
 }
 
-const allLogs: ActivityLog[] = [
-  { id: 1, datetime: "Mar 12, 2026 10:05 AM", zoneMachine: "Zone A / Dryer M02", eventType: "critical", category: "sensor", user: "System", details: "Temperature exceeded critical threshold: 77°C" },
-  { id: 2, datetime: "Mar 12, 2026 09:52 AM", zoneMachine: "Zone A / Dryer M03", eventType: "warning", category: "sensor", user: "System", details: "Humidity dropped below minimum: 38%" },
-  { id: 3, datetime: "Mar 12, 2026 09:44 AM", zoneMachine: "Zone A / Dryer M01", eventType: "action", category: "machine", user: "System", details: "Exhaust fan turned on automatically due to high temperature" },
-  { id: 4, datetime: "Mar 12, 2026 09:31 AM", zoneMachine: "Zone B / Dryer M08", eventType: "info", category: "batch", user: "Operator 3", details: "Drying cycle #44 completed successfully — Lemon batch" },
-  { id: 5, datetime: "Mar 12, 2026 09:18 AM", zoneMachine: "Zone B / Dryer M09", eventType: "critical", category: "sensor", user: "System", details: "Temp alarm triggered: 78°C — Heater override applied" },
-  { id: 6, datetime: "Mar 12, 2026 09:10 AM", zoneMachine: "Zone A / Dryer M04", eventType: "warning", category: "sensor", user: "System", details: "Light sensor offline — fallback to manual mode" },
-  { id: 7, datetime: "Mar 12, 2026 08:57 AM", zoneMachine: "Zone A / Dryer M01", eventType: "action", category: "machine", user: "Operator 2", details: "Auto Mode re-engaged after manual override period" },
-  { id: 8, datetime: "Mar 12, 2026 08:44 AM", zoneMachine: "Zone B / Dryer M11", eventType: "info", category: "batch", user: "System", details: "Scheduled Day Mode started — full heater + fan active" },
-  { id: 9, datetime: "Mar 12, 2026 08:30 AM", zoneMachine: "Zone A / Dryer M03", eventType: "action", category: "machine", user: "System", details: "Natural drying door opened based on light schedule rule" },
-  { id: 10, datetime: "Mar 12, 2026 08:12 AM", zoneMachine: "Zone A / Dryer M02", eventType: "warning", category: "sensor", user: "System", details: "Power fluctuation detected — voltage dip to 210V" },
-  { id: 11, datetime: "Mar 12, 2026 07:55 AM", zoneMachine: "Zone B / Dryer M07", eventType: "info", category: "sensor", user: "Technician 1", details: "Sensor calibration completed — all readings nominal" },
-  { id: 12, datetime: "Mar 12, 2026 07:40 AM", zoneMachine: "Zone A / Dryer M05", eventType: "action", category: "machine", user: "System", details: "Humidity threshold reached — drying door closed automatically" },
-  { id: 13, datetime: "Mar 12, 2026 07:22 AM", zoneMachine: "Zone A / Dryer M02", eventType: "info", category: "parameter", user: "Admin", details: "Temperature setpoint changed: 68°C → 72°C" },
-  { id: 14, datetime: "Mar 12, 2026 07:10 AM", zoneMachine: "Zone B / Dryer M08", eventType: "info", category: "batch", user: "Operator 1", details: "Started drying batch #45 — Mango (12kg)" },
-  { id: 15, datetime: "Mar 11, 2026 11:30 PM", zoneMachine: "Zone B / Dryer M12", eventType: "info", category: "batch", user: "System", details: "Night Mode activated — heater reduced to 40% capacity" },
-  { id: 16, datetime: "Mar 11, 2026 10:15 PM", zoneMachine: "Zone A / Dryer M06", eventType: "action", category: "batch", user: "Operator 3", details: "Drying batch #43 stopped manually — cycle complete" },
-  { id: 17, datetime: "Mar 11, 2026 09:00 PM", zoneMachine: "Zone B / Dryer M10", eventType: "warning", category: "machine", user: "System", details: "Exhaust fan speed reduced — ambient temperature drop" },
-  { id: 18, datetime: "Mar 11, 2026 06:45 PM", zoneMachine: "Zone A / Dryer M01", eventType: "info", category: "parameter", user: "Supervisor", details: "Fan speed adjusted: 60% → 75%" },
-  { id: 19, datetime: "Mar 11, 2026 06:00 AM", zoneMachine: "All Zones", eventType: "action", category: "machine", user: "System", details: "Day Mode activated across all active machines" },
-  { id: 20, datetime: "Mar 11, 2026 03:15 AM", zoneMachine: "Zone B / Dryer M09", eventType: "info", category: "batch", user: "Operator 2", details: "Started drying batch #44 — Lemon (8kg)" },
-  { id: 21, datetime: "Mar 10, 2026 03:22 PM", zoneMachine: "Zone A / Dryer M02", eventType: "critical", category: "sensor", user: "System", details: "Emergency stop triggered — temperature sensor fault" },
-  { id: 22, datetime: "Mar 10, 2026 02:50 PM", zoneMachine: "Zone A / Dryer M03", eventType: "info", category: "parameter", user: "Admin", details: "Humidity setpoint changed: 42% → 45%" },
-  { id: 23, datetime: "Mar 10, 2026 01:45 PM", zoneMachine: "Zone B / Dryer M09", eventType: "info", category: "batch", user: "Operator 1", details: "Started drying batch #42 — Grapefruit (10kg)" },
-  { id: 24, datetime: "Mar 10, 2026 12:30 PM", zoneMachine: "Zone A / Dryer M05", eventType: "action", category: "machine", user: "System", details: "Heater activated based on temperature threshold rule" },
-  { id: 25, datetime: "Mar 10, 2026 11:10 AM", zoneMachine: "Zone A / Dryer M01", eventType: "action", category: "parameter", user: "Supervisor", details: "Threshold rule updated — temp limit set to 72°C" },
-  { id: 26, datetime: "Mar 10, 2026 09:20 AM", zoneMachine: "Zone B / Dryer M11", eventType: "info", category: "batch", user: "Operator 2", details: "Drying batch #41 stopped — quality check complete" },
-  { id: 27, datetime: "Mar 10, 2026 08:00 AM", zoneMachine: "Zone A / Dryer M04", eventType: "action", category: "machine", user: "Operator 1", details: "Manual override applied — switching to Auto mode" },
-  { id: 28, datetime: "Mar 09, 2026 08:30 AM", zoneMachine: "Zone A / Dryer M04", eventType: "info", category: "machine", user: "Technician 2", details: "Machine back online after maintenance window" },
-  { id: 29, datetime: "Mar 09, 2026 07:15 AM", zoneMachine: "Zone B / Dryer M07", eventType: "info", category: "parameter", user: "Admin", details: "Light intensity threshold changed: 40% → 45%" },
-  { id: 30, datetime: "Mar 08, 2026 04:10 PM", zoneMachine: "Zone A / Dryer M02", eventType: "warning", category: "sensor", user: "System", details: "Temperature sensor reading unstable — averaging enabled" },
-];
+type ReportRow = Record<string, string | number | boolean | null | undefined>;
+
+type LogGroup = "user" | "batch-user" | "sensor";
+
+function getStoredAppUserId() {
+  if (typeof window === "undefined") return undefined;
+
+  const userData = localStorage.getItem("userData");
+  if (!userData) return undefined;
+
+  try {
+    const parsed = JSON.parse(userData);
+    return parsed?.app_user_id ? Number(parsed.app_user_id) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function normalizeReportRows(response: any): ReportRow[] {
+  const rows = response?.data ?? response?.items ?? response?.rows ?? response;
+  return Array.isArray(rows) ? rows : [];
+}
+
+function isDateLikeValue(value: string) {
+  return (
+    /^\d{4}-\d{2}-\d{2}$/.test(value) ||
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z?$/.test(value) ||
+    /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(value)
+  );
+}
+
+function formatReportCellValue(column: string, value: ReportRow[string]) {
+  if (value === null || value === undefined || value === "") {
+    return "—";
+  }
+
+  if (typeof value === "string" && (isDateLikeValue(value) || /date|time/i.test(column))) {
+    const parsedDate = new Date(value);
+    if (!Number.isNaN(parsedDate.getTime())) {
+      const datePart = new Intl.DateTimeFormat("vi-VN", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+      }).format(parsedDate);
+
+      const timePart = new Intl.DateTimeFormat("vi-VN", {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      }).format(parsedDate);
+
+      return (
+        <div className="inline-flex flex-col rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 leading-tight">
+          <span className="text-[0.78rem] font-semibold text-slate-700">{datePart}</span>
+          <span className="text-[0.68rem] uppercase tracking-[0.08em] text-slate-400">{timePart}</span>
+        </div>
+      );
+    }
+  }
+
+  return String(value);
+}
+
+function normalizeLogText(value: unknown) {
+  return String(value ?? "").toLowerCase().trim();
+}
+
+function getLogGroup(log: ActivityLog): LogGroup {
+  const text = normalizeLogText([log.details, log.zoneMachine, log.user, log.category, log.eventType].join(" "));
+
+  if (text.includes("sensor") || text.includes("threshold") || text.includes("value") || text.includes("reading") || text.includes("update sensor") || text.includes("changed sensor")) {
+    return "sensor";
+  }
+
+  if (
+    text.includes("batch") ||
+    text.includes("start") ||
+    text.includes("started") ||
+    text.includes("stop") ||
+    text.includes("stopped") ||
+    text.includes("create user") ||
+    text.includes("created user") ||
+    text.includes("add user") ||
+    text.includes("new user")
+  ) {
+    return "batch-user";
+  }
+
+  return "user";
+}
+
+function getLogGroupMeta(group: LogGroup) {
+  switch (group) {
+    case "sensor":
+      return {
+        label: "Sensor Changes",
+        description: "Thay đổi giá trị sensor / ngưỡng / tín hiệu",
+        chipClassName: "bg-amber-50 text-amber-700 border border-amber-100",
+      };
+    case "batch-user":
+      return {
+        label: "Batch & User Actions",
+        description: "Bắt đầu, dừng batch và thao tác tạo user",
+        chipClassName: "bg-cyan-50 text-cyan-700 border border-cyan-100",
+      };
+    default:
+      return {
+        label: "User Logs",
+        description: "Đăng nhập, đăng xuất và hoạt động người dùng",
+        chipClassName: "bg-slate-50 text-slate-700 border border-slate-200",
+      };
+  }
+}
+
 
 const eventTypeConfig: Record<EventType, { label: string; bg: string; text: string; icon: React.ReactNode }> = {
   info: { label: "Info", bg: "bg-blue-50", text: "text-blue-600", icon: <Info size={11} /> },
@@ -119,32 +195,27 @@ const categoryConfig: Record<ActionCategory, { label: string; icon: React.ReactN
   machine: { label: "Machine Action", icon: <Cpu size={13} />, color: "#10b981" },
 };
 
-// ── Custom Tooltip ────────────────────────────────────────────────────────────
-
-const CustomTooltip = ({ active, payload, label }: any) => {
-  if (active && payload && payload.length) {
-    return (
-      <div className="bg-white border border-slate-200 rounded-lg shadow-lg p-3 min-w-[160px]">
-        <p className="text-slate-600 mb-2" style={{ fontSize: "0.72rem", fontWeight: 700 }}>
-          {label}
-        </p>
-        {payload.map((entry: any) => (
-          <div key={entry.name} className="flex items-center justify-between gap-4 mb-1">
-            <div className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full" style={{ background: entry.color }} />
-              <span className="text-slate-500" style={{ fontSize: "0.72rem" }}>{entry.name}</span>
-            </div>
-            <span style={{ fontSize: "0.78rem", fontWeight: 700, color: entry.color }}>
-              {entry.value}
-              {entry.name === "Temperature" ? "°C" : entry.name === "Humidity" ? "%" : " %"}
-            </span>
-          </div>
-        ))}
-      </div>
-    );
-  }
-  return null;
+const fallbackEventTypeConfig = {
+  label: "Info",
+  bg: "bg-blue-50",
+  text: "text-blue-600",
+  icon: <Info size={11} />,
 };
+
+const fallbackCategoryConfig = {
+  label: "Other",
+  icon: <Cpu size={13} />,
+  color: "#64748b",
+};
+
+function getEventTypeConfig(eventType: string) {
+  return eventTypeConfig[eventType as EventType] ?? fallbackEventTypeConfig;
+}
+
+function getCategoryConfig(category: string) {
+  return categoryConfig[category as ActionCategory] ?? fallbackCategoryConfig;
+}
+
 
 // ── Stat Card ─────────────────────────────────────────────────────────────────
 
@@ -167,51 +238,202 @@ function StatPill({ label, avg, trend, color, icon }: { label: string; avg: stri
   );
 }
 
+// ── Helper Functions ────────────────────────────────────────────────────────────
+
+function getMachineIdFromString(machineStr: string): number | null {
+  // Convert machine string like "m01", "m02", "m09" to dry_id (1, 2, 9)
+  if (!machineStr || machineStr === "all") return null;
+  const match = machineStr.match(/m(\d+)/i);
+  return match ? parseInt(match[1], 10) : null;
+}
+
+function getMachineLabel(machineStr: string): string {
+  // Get display label for machine
+  if (machineStr === "all") return "All Machines";
+  const match = machineStr.match(/m(\d+)/i);
+  return match ? `Dryer M${match[1]}` : machineStr;
+}
+
 // ── Main Component ────────────────────────────────────────────────────────────
 
 const LOGS_PER_PAGE = 8;
 
-export function ReportsAnalytics() {
+interface ReportsAnalyticsProps {
+  batchId?: number;
+  appUserId?: number;
+}
+
+export function ReportsAnalytics({ batchId, appUserId }: ReportsAnalyticsProps = {}) {
   const isAdmin = useIsAdmin();
   const [dateRange, setDateRange] = useState("30d");
   const [zoneMachine, setZoneMachine] = useState("all");
   const [eventFilter, setEventFilter] = useState<"all" | EventType>("all");
   const [categoryFilter, setCategoryFilter] = useState<"all" | ActionCategory>("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [logStyleFilter, setLogStyleFilter] = useState("all");
   const [currentPage, setCurrentPage] = useState(1);
-  const [exportDone, setExportDone] = useState(false);
+  const [exportDone, setExportDone] = useState(false);  const [exportLoading, setExportLoading] = useState(false);  
+  
+  // Export modal states
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [selectedReportType, setSelectedReportType] = useState<"operations" | "quality" | "incidents">("operations");
+  const [selectedFileFormat, setSelectedFileFormat] = useState<"xlsx" | "pdf" | "csv">("xlsx");
+  const [dateFrom, setDateFrom] = useState(new Date(new Date().setDate(new Date().getDate() - 30)).toISOString().split('T')[0]);
+  const [dateTo, setDateTo] = useState(new Date().toISOString().split('T')[0]);
+  
+  // Operations overview state
+  const [operationsRows, setOperationsRows] = useState<ReportRow[]>([]);
+  const [operationsLoading, setOperationsLoading] = useState(true);
+  const [operationsError, setOperationsError] = useState<string | null>(null);
+
+  // Logs state
+  const [logs, setLogs] = useState<ActivityLog[]>([]);
+  const [logsLoading, setLogsLoading] = useState(false);
+  const [logsError, setLogsError] = useState<string | null>(null);
+
+  const resolvedAppUserId = appUserId ?? getStoredAppUserId();
+
+  useEffect(() => {
+    const fetchOperationsOverview = async () => {
+      try {
+        setOperationsLoading(true);
+        setOperationsError(null);
+
+        const response = await monitoringAPI.reports.operations();
+        setOperationsRows(normalizeReportRows(response));
+      } catch (err) {
+        console.error("Error fetching operations overview:", err);
+        setOperationsError(err instanceof Error ? err.message : "Failed to load operations overview");
+        setOperationsRows([]);
+      } finally {
+        setOperationsLoading(false);
+      }
+    };
+
+    fetchOperationsOverview();
+  }, []);
+
+  useEffect(() => {
+    if (!resolvedAppUserId) {
+      setLogsError(null);
+      setLogs([]);
+      return;
+    }
+
+    const fetchLogs = async () => {
+      try {
+        setLogsLoading(true);
+        setLogsError(null);
+        const response = await monitoringAPI.logs.list({ app_user_id: resolvedAppUserId });
+        const logsData = response?.data ?? response ?? [];
+        const filteredLogs = logsData.filter((log: any) => log.app_user_id === resolvedAppUserId);
+        if (Array.isArray(filteredLogs)) {
+          // Transform API response to ActivityLog format
+          const transformedLogs: ActivityLog[] = filteredLogs.map((log, idx) => ({
+            id: log.id ?? idx,
+            datetime: log.datetime ?? log.created_at ?? log.createdAt ?? new Date().toLocaleString(),
+            logStyle: String(log.log_style ?? log.logStyle ?? log.severity ?? "unknown"),
+            zoneMachine: log.zoneMachine ?? log.zone_machine ?? log.dry_name ?? "User log",
+            eventType: log.eventType ?? log.severity ?? "info",
+            category: log.category ?? log.log_category ?? "batch",
+            user: log.user ?? log.app_user_name ?? `User #${resolvedAppUserId}`,
+            details: log.details ?? log.message ?? log.description ?? "",
+          }));
+          setLogs(transformedLogs);
+        } else {
+          setLogsError("Invalid logs data format");
+          setLogs([]);
+        }
+      } catch (err) {
+        console.error("Error fetching logs:", err);
+        setLogsError(err instanceof Error ? err.message : "Failed to load logs");
+        // Fallback to mock data
+        setLogs([]);
+      } finally {
+        setLogsLoading(false);
+      }
+    };
+
+    fetchLogs();
+  }, [resolvedAppUserId]);
 
   const days = dateRange === "7d" ? 7 : dateRange === "14d" ? 14 : dateRange === "60d" ? 60 : 30;
-  const chartData = useMemo(() => generateDailyData(days), [days]);
+  const mockChartData = useMemo(() => generateDailyData(days), [days]);
+  
+  // State for trend chart data from API
+  const [trendChartData, setTrendChartData] = useState<any[]>([]);
 
-  // Chart tick interval
-  const tickInterval = days <= 7 ? 0 : days <= 14 ? 1 : days <= 30 ? 3 : 6;
-
-  // Stats
-  const avgTemp = (chartData.reduce((s, d) => s + d.temperature, 0) / chartData.length).toFixed(1);
-  const avgHumid = (chartData.reduce((s, d) => s + d.humidity, 0) / chartData.length).toFixed(1);
-  const avgLight = Math.round(chartData.reduce((s, d) => s + d.light, 0) / chartData.length);
+  // Stats - use real data from chart if available, otherwise use mock data
+  const dataToUse = trendChartData.length > 0 ? trendChartData : mockChartData;
+  const avgTemp = (dataToUse.reduce((s, d) => s + d.temperature, 0) / dataToUse.length).toFixed(1);
+  const avgHumid = (dataToUse.reduce((s, d) => s + d.humidity, 0) / dataToUse.length).toFixed(1);
 
   // Filtered logs
   const filteredLogs = useMemo(() => {
-    return allLogs.filter((l) => {
-      const typeMatch = eventFilter === "all" || l.eventType === eventFilter;
-      const categoryMatch = categoryFilter === "all" || l.category === categoryFilter;
-      const zoneMatch = zoneMachine === "all" || l.zoneMachine.toLowerCase().includes(zoneMachine.replace("-", " "));
+    return logs.filter((l) => {
+      const styleMatch = logStyleFilter === "all" || l.logStyle.toLowerCase() === logStyleFilter.toLowerCase();
       const searchMatch = searchQuery === "" ||
         l.details.toLowerCase().includes(searchQuery.toLowerCase()) ||
         l.zoneMachine.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        l.user.toLowerCase().includes(searchQuery.toLowerCase());
-      return typeMatch && categoryMatch && zoneMatch && searchMatch;
+        l.user.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        l.logStyle.toLowerCase().includes(searchQuery.toLowerCase());
+      return styleMatch && searchMatch;
     });
-  }, [eventFilter, categoryFilter, zoneMachine, searchQuery]);
+  }, [searchQuery, logs, logStyleFilter]);
+
+  const logStyleOptions = useMemo(() => {
+    const uniqueStyles = Array.from(new Set(logs.map((log) => log.logStyle).filter(Boolean)));
+    return ["all", ...uniqueStyles];
+  }, [logs]);
 
   const totalPages = Math.ceil(filteredLogs.length / LOGS_PER_PAGE);
   const paginatedLogs = filteredLogs.slice((currentPage - 1) * LOGS_PER_PAGE, currentPage * LOGS_PER_PAGE);
 
   const handleExport = () => {
-    setExportDone(true);
-    setTimeout(() => setExportDone(false), 2500);
+    setShowExportModal(true);
+  };
+
+  const confirmExport = async () => {
+    try {
+      setExportLoading(true);
+      setShowExportModal(false);
+      
+      // Build export payload
+      const exportPayload = {
+        report_type: selectedReportType,
+        file_format: selectedFileFormat,
+        filters: {
+          from: new Date(dateFrom + 'T00:00:00Z').toISOString(),
+          to: new Date(dateTo + 'T23:59:59Z').toISOString(),
+          ...(batchId && { batch_id: batchId }),
+        },
+      };
+      
+      const response = await monitoringAPI.reports.export(exportPayload as any);
+      
+      // If response contains file data, download it
+      if (response && (response.data || response.file)) {
+        const fileData = response.data || response;
+        const fileName = `report_${selectedReportType}_${new Date().toISOString().split('T')[0]}.${selectedFileFormat}`;
+        
+        // Create download link
+        const blob = new Blob([JSON.stringify(fileData)], { type: 'application/json' });
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = fileName;
+        link.click();
+        window.URL.revokeObjectURL(url);
+      }
+      
+      setExportDone(true);
+      setTimeout(() => setExportDone(false), 2500);
+    } catch (err) {
+      console.error('Export failed:', err);
+      alert('Export failed: ' + (err instanceof Error ? err.message : 'Unknown error'));
+    } finally {
+      setExportLoading(false);
+    }
   };
 
   const handlePageChange = (p: number) => {
@@ -266,9 +488,7 @@ export function ReportsAnalytics() {
                   className="appearance-none bg-slate-50 border border-slate-200 text-slate-700 rounded-lg pl-3 pr-8 py-2 outline-none focus:ring-2 focus:ring-emerald-400 focus:border-emerald-400 cursor-pointer transition-all"
                   style={{ fontSize: "0.8125rem", fontWeight: 500 }}
                 >
-                  <option value="all">All Zones & Machines</option>
-                  <option value="zone-a">Zone A — Tropical</option>
-                  <option value="zone-b">Zone B — Citrus</option>
+                  <option value="all">All Machines</option>
                   <option value="m01">Dryer M01</option>
                   <option value="m02">Dryer M02</option>
                   <option value="m09">Dryer M09</option>
@@ -282,15 +502,24 @@ export function ReportsAnalytics() {
               <div className="ml-auto" >
                 <button
                   onClick={handleExport}
+                  disabled={exportLoading}
                   className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition-all ${
                     exportDone
                     ? "bg-emerald-50 border-emerald-200 text-emerald-700"
+                    : exportLoading
+                    ? "bg-slate-50 border-slate-200 text-slate-400 cursor-not-allowed"
                     : "bg-white border-slate-200 text-slate-700 hover:border-emerald-400 hover:text-emerald-600"
                 }`}
                 style={{ fontSize: "0.8125rem", fontWeight: 600 }}
               >
-                {exportDone ? <CheckCircle size={15} className="text-emerald-500" /> : <Download size={15} />}
-                {exportDone ? "Exported!" : "Export Data"}
+                {exportLoading ? (
+                  <Loader size={15} className="animate-spin" />
+                ) : exportDone ? (
+                  <CheckCircle size={15} className="text-emerald-500" />
+                ) : (
+                  <Download size={15} />
+                )}
+                {exportLoading ? "Exporting..." : exportDone ? "Exported!" : "Export Data"}
               </button>
             </div>
             )}
@@ -298,122 +527,122 @@ export function ReportsAnalytics() {
         </div>
                   
         {/* Stats Pills */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <StatPill label="AVG TEMPERATURE" avg={`${avgTemp}°C`} trend="up" color="#f97316" icon={<Thermometer size={16} />} />
           <StatPill label="AVG HUMIDITY" avg={`${avgHumid}%`} trend="down" color="#3b82f6" icon={<Droplets size={16} />} />
-          <StatPill label="AVG LIGHT INTENSITY" avg={`${avgLight}%`} trend="stable" color="#eab308" icon={<Sun size={16} />} />
         </div>
 
         {/* 30-Day Environmental Trends Chart */}
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
-          <div className="flex items-start justify-between mb-4">
+        {zoneMachine && zoneMachine !== "all" ? (
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+            <div className="flex items-start justify-between mb-4">
+              <div>
+                <h2 className="text-slate-800" style={{ fontWeight: 700, fontSize: "0.9375rem" }}>
+                  Temp & Humidity Trends
+                </h2>
+                <p className="text-slate-400" style={{ fontSize: "0.75rem" }}>
+                  Machine sensor tracking over time
+                </p>
+              </div>
+            </div>
+            <TrendChart dryId={getMachineIdFromString(zoneMachine)} machineLabel={getMachineLabel(zoneMachine)} onDataLoaded={setTrendChartData} />
+          </div>
+        ) : (
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+            <div className="flex items-start justify-between mb-4">
+              <div>
+                <h2 className="text-slate-800" style={{ fontWeight: 700, fontSize: "0.9375rem" }}>
+                  Temp & Humidity Trends
+                </h2>
+                <p className="text-slate-400" style={{ fontSize: "0.75rem" }}>
+                  Select a specific machine to view sensor data
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center justify-center h-[220px] text-slate-400">
+              <p>Please select a specific machine (Dryer M01, M02, etc.) to display sensor trends</p>
+            </div>
+          </div>
+        )}
+
+        
+        {/* Operations Overview Table */}
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="px-5 py-4 border-b border-slate-100 flex items-start justify-between gap-3">
             <div>
               <h2 className="text-slate-800" style={{ fontWeight: 700, fontSize: "0.9375rem" }}>
-                {days}-Day Environmental Trends
+                Operations Overview
               </h2>
               <p className="text-slate-400" style={{ fontSize: "0.75rem" }}>
-                Average Temperature, Humidity, and Light Intensity over time
+                Data from /api/v1/reports/operations
               </p>
             </div>
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-1.5">
-                <span className="w-3 h-0.5 bg-orange-400 rounded-full inline-block" />
-                <span className="text-slate-500" style={{ fontSize: "0.72rem" }}>Temperature</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="w-3 h-0.5 bg-blue-400 rounded-full inline-block" />
-                <span className="text-slate-500" style={{ fontSize: "0.72rem" }}>Humidity</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="w-3 h-0.5 bg-yellow-400 rounded-full inline-block" />
-                <span className="text-slate-500" style={{ fontSize: "0.72rem" }}>Light</span>
-              </div>
+            <div className="text-slate-400" style={{ fontSize: "0.75rem" }}>
+              {operationsLoading ? "Loading operations..." : `${operationsRows.length} records`}
             </div>
           </div>
 
-          <ResponsiveContainer width="100%" height={260}>
-            <LineChart data={chartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-              <XAxis
-                dataKey="day"
-                tick={{ fontSize: 10, fill: "#94a3b8" }}
-                tickLine={false}
-                axisLine={false}
-                interval={tickInterval}
-              />
-              <YAxis
-                key="temp-axis"
-                yAxisId="temp"
-                domain={[40, 90]}
-                tick={{ fontSize: 10, fill: "#94a3b8" }}
-                tickLine={false}
-                axisLine={false}
-                tickFormatter={(v) => `${v}°`}
-              />
-              <YAxis
-                key="humid-axis"
-                yAxisId="humid"
-                orientation="right"
-                domain={[20, 80]}
-                tick={{ fontSize: 10, fill: "#94a3b8" }}
-                tickLine={false}
-                axisLine={false}
-                tickFormatter={(v) => `${v}%`}
-              />
-              <YAxis
-                key="light-axis"
-                yAxisId="light"
-                orientation="right"
-                domain={[300, 700]}
-                hide
-              />
-              <Tooltip content={<CustomTooltip />} />
-              <Line
-                yAxisId="temp"
-                type="monotone"
-                dataKey="temperature"
-                name="Temperature"
-                stroke="#f97316"
-                strokeWidth={2.5}
-                dot={false}
-                activeDot={{ r: 5, fill: "#f97316" }}
-              />
-              <Line
-                yAxisId="humid"
-                type="monotone"
-                dataKey="humidity"
-                name="Humidity"
-                stroke="#3b82f6"
-                strokeWidth={2.5}
-                dot={false}
-                activeDot={{ r: 5, fill: "#3b82f6" }}
-              />
-              <Line
-                yAxisId="light"
-                type="monotone"
-                dataKey="light"
-                name="Light"
-                stroke="#eab308"
-                strokeWidth={2}
-                dot={false}
-                strokeDasharray="4 2"
-                activeDot={{ r: 5, fill: "#eab308" }}
-              />
-            </LineChart>
-          </ResponsiveContainer>
+          {operationsError && (
+            <div className="px-5 py-4 text-sm text-red-600 bg-red-50 border-b border-red-100">
+              {operationsError}
+            </div>
+          )}
+
+          {operationsLoading ? (
+            <div className="px-5 py-8 text-sm text-slate-400">Loading operations overview...</div>
+          ) : operationsRows.length === 0 ? (
+            <div className="px-5 py-8 text-sm text-slate-400">No operations overview records found.</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-100">
+                    {Object.keys(operationsRows[0]).map((column) => (
+                      <th
+                        key={column}
+                        className="text-left px-5 py-3 text-slate-500"
+                        style={{ fontSize: "0.72rem", fontWeight: 700, letterSpacing: "0.05em" }}
+                      >
+                        {column.replace(/_/g, " ").toUpperCase()}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {operationsRows.map((row, idx) => (
+                    <tr
+                      key={idx}
+                      className={`border-b border-slate-50 hover:bg-slate-50 transition-colors ${
+                        idx % 2 === 0 ? "bg-white" : "bg-slate-50/30"
+                      }`}
+                    >
+                      {Object.keys(operationsRows[0]).map((column) => (
+                        <td key={column} className="px-5 py-3.5">
+                          <div className="text-slate-600" style={{ fontSize: "0.78rem" }}>
+                            {formatReportCellValue(column, row[column])}
+                          </div>
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
 
-        {/* Activity History & System Logs */}
+
+        {/* User Logs */}
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
           {/* Table Header */}
           <div className="px-5 py-4 border-b border-slate-100 space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h2 className="text-slate-800" style={{ fontWeight: 700, fontSize: "0.9375rem" }}>
-                  Activity History & System Logs
+                  Logs by Type {resolvedAppUserId ? `(User #${resolvedAppUserId})` : ""}
                 </h2>
                 <p className="text-slate-400" style={{ fontSize: "0.75rem" }}>
-                  {filteredLogs.length} records found
+                  {logsLoading ? "Loading logs..." : `${filteredLogs.length} records found`} · Tách thành 3 bảng riêng theo loại log
                 </p>
               </div>
 
@@ -427,160 +656,126 @@ export function ReportsAnalytics() {
                   placeholder="Search logs..."
                   className="pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-slate-700 outline-none focus:ring-2 focus:ring-emerald-400 focus:border-emerald-400 transition-all"
                   style={{ fontSize: "0.8125rem", width: "220px" }}
+                  disabled={logsLoading}
                 />
               </div>
             </div>
 
-            {/* Filter Tabs */}
-            <div className="flex flex-wrap items-center gap-4">
-              {/* Event Type Filter */}
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="text-slate-500 mr-1" style={{ fontSize: "0.7rem", fontWeight: 600 }}>SEVERITY:</span>
-                {(["all", "info", "warning", "action", "critical"] as const).map((t) => {
-                  const cfg = t !== "all" ? eventTypeConfig[t] : null;
-                  return (
-                    <button
-                      key={t}
-                      onClick={() => { setEventFilter(t); setCurrentPage(1); }}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg capitalize transition-all ${
-                        eventFilter === t
-                          ? t === "all"
-                            ? "bg-slate-800 text-white"
-                            : `${cfg!.bg} ${cfg!.text} border border-current`
-                          : "text-slate-400 hover:bg-slate-50"
-                      }`}
-                      style={{ fontSize: "0.72rem", fontWeight: 600 }}
-                    >
-                      {cfg && eventFilter === t && cfg.icon}
-                      {t}
-                    </button>
-                  );
-                })}
+            {/* Error state */}
+            {logsError && (
+              <div className="flex items-center gap-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <AlertTriangle size={16} className="text-red-500" />
+                <span className="text-red-700 text-sm">{logsError}</span>
               </div>
+            )}
 
-              <div className="w-px h-6 bg-slate-200" />
-
-              {/* Category Filter */}
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="text-slate-500 mr-1" style={{ fontSize: "0.7rem", fontWeight: 600 }}>CATEGORY:</span>
-                <button
-                  onClick={() => { setCategoryFilter("all"); setCurrentPage(1); }}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg capitalize transition-all ${
-                    categoryFilter === "all"
-                      ? "bg-slate-800 text-white"
-                      : "text-slate-400 hover:bg-slate-50"
-                  }`}
-                  style={{ fontSize: "0.72rem", fontWeight: 600 }}
-                >
-                  All
-                </button>
-                {(["parameter", "batch", "sensor", "machine"] as const).map((cat) => {
-                  const cfg = categoryConfig[cat];
-                  return (
-                    <button
-                      key={cat}
-                      onClick={() => { setCategoryFilter(cat); setCurrentPage(1); }}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all ${
-                        categoryFilter === cat
-                          ? "text-white border"
-                          : "text-slate-400 hover:bg-slate-50"
-                      }`}
-                      style={{
-                        fontSize: "0.72rem",
-                        fontWeight: 600,
-                        background: categoryFilter === cat ? cfg.color : "transparent",
-                        borderColor: categoryFilter === cat ? cfg.color : "transparent",
-                      }}
-                    >
-                      {categoryFilter === cat && cfg.icon}
-                      {cfg.label}
-                    </button>
-                  );
-                })}
+            {/* Loading state */}
+            {logsLoading && (
+              <div className="flex items-center justify-center py-4">
+                <Loader size={16} className="animate-spin text-slate-400 mr-2" />
+                <span className="text-slate-400 text-sm">Loading logs data...</span>
               </div>
+            )}
+
+            {/* log_style Filter */}
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-slate-500 mr-1" style={{ fontSize: "0.7rem", fontWeight: 600 }}>LOG STYLE:</span>
+              {logStyleOptions.map((style) => {
+                const active = logStyleFilter === style;
+                return (
+                  <button
+                    key={style}
+                    onClick={() => { setLogStyleFilter(style); setCurrentPage(1); }}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg capitalize transition-all ${
+                      active
+                        ? "bg-slate-800 text-white"
+                        : "text-slate-400 hover:bg-slate-50"
+                    }`}
+                    style={{ fontSize: "0.72rem", fontWeight: 600 }}
+                  >
+                    {style === "all" ? "All" : style.replace(/[_-]/g, " ")}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
-          {/* Table */}
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="bg-slate-50 border-b border-slate-100">
-                  {["Date & Time", "Zone / Machine", "Category", "Severity", "User", "Details"].map((col) => (
-                    <th
-                      key={col}
-                      className="text-left px-5 py-3 text-slate-500"
-                      style={{ fontSize: "0.72rem", fontWeight: 700, letterSpacing: "0.05em" }}
-                    >
-                      {col.toUpperCase()}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {paginatedLogs.map((log, idx) => {
-                  const typeCfg = eventTypeConfig[log.eventType];
-                  const catCfg = categoryConfig[log.category];
-                  return (
-                    <tr
-                      key={log.id}
-                      className={`border-b border-slate-50 hover:bg-slate-50 transition-colors ${
-                        idx % 2 === 0 ? "bg-white" : "bg-slate-50/30"
-                      }`}
-                    >
-                      <td className="px-5 py-3.5">
-                        <span className="text-slate-600" style={{ fontSize: "0.78rem" }}>
-                          {log.datetime}
-                        </span>
-                      </td>
-                      <td className="px-5 py-3.5">
-                        <span className="text-slate-700" style={{ fontSize: "0.8rem", fontWeight: 600 }}>
-                          {log.zoneMachine}
-                        </span>
-                      </td>
-                      <td className="px-5 py-3.5">
-                        <span
-                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-white"
-                          style={{ fontSize: "0.7rem", fontWeight: 700, background: catCfg.color }}
+          <div className="px-5 pb-5 pt-4">
+            <div className="rounded-xl border border-slate-200 overflow-hidden bg-white">
+              <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
+                <div>
+                  <h3 className="text-slate-800" style={{ fontWeight: 700, fontSize: "0.9rem" }}>
+                    Log Table
+                  </h3>
+                  <p className="text-slate-400" style={{ fontSize: "0.72rem" }}>
+                    Lọc trực tiếp theo log_style
+                  </p>
+                </div>
+                <span className="inline-flex items-center rounded-full px-2.5 py-1 text-[0.7rem] font-semibold bg-slate-50 text-slate-700 border border-slate-200">
+                  {filteredLogs.length} records
+                </span>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-100">
+                      {["Date & Time", "Log Style", "User", "Details"].map((col) => (
+                        <th
+                          key={col}
+                          className="text-left px-5 py-3 text-slate-500"
+                          style={{ fontSize: "0.72rem", fontWeight: 700, letterSpacing: "0.05em" }}
                         >
-                          {catCfg.icon}
-                          {catCfg.label}
-                        </span>
-                      </td>
-                      <td className="px-5 py-3.5">
-                        <span
-                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full ${typeCfg.bg} ${typeCfg.text}`}
-                          style={{ fontSize: "0.7rem", fontWeight: 700 }}
-                        >
-                          {typeCfg.icon}
-                          {typeCfg.label}
-                        </span>
-                      </td>
-                      <td className="px-5 py-3.5">
-                        <div className="flex items-center gap-1.5">
-                          <User size={12} className="text-slate-400" />
-                          <span className="text-slate-600" style={{ fontSize: "0.78rem" }}>
-                            {log.user}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="px-5 py-3.5">
-                        <span className="text-slate-600" style={{ fontSize: "0.78rem" }}>
-                          {log.details}
-                        </span>
-                      </td>
+                          {col.toUpperCase()}
+                        </th>
+                      ))}
                     </tr>
-                  );
-                })}
-                {paginatedLogs.length === 0 && (
-                  <tr>
-                    <td colSpan={6} className="px-5 py-10 text-center text-slate-400" style={{ fontSize: "0.8rem" }}>
-                      No records match the selected filters.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+                  </thead>
+                  <tbody>
+                    {filteredLogs.length > 0 ? (
+                      paginatedLogs.map((log, idx) => (
+                        <tr
+                          key={log.id}
+                          className={`border-b border-slate-50 hover:bg-slate-50 transition-colors ${
+                            idx % 2 === 0 ? "bg-white" : "bg-slate-50/30"
+                          }`}
+                        >
+                          <td className="px-5 py-3.5">
+                            <div className="text-slate-600" style={{ fontSize: "0.78rem" }}>
+                              {formatReportCellValue("datetime", log.datetime)}
+                            </div>
+                          </td>
+                          <td className="px-5 py-3.5">
+                            <span className="inline-flex items-center rounded-full px-2.5 py-1 text-[0.7rem] font-semibold bg-cyan-50 text-cyan-700 border border-cyan-100">
+                              {log.logStyle.replace(/[_-]/g, " ")}
+                            </span>
+                          </td>
+                          <td className="px-5 py-3.5">
+                            <div className="flex items-center gap-1.5">
+                              <User size={12} className="text-slate-400" />
+                              <span className="text-slate-600" style={{ fontSize: "0.78rem" }}>
+                                {log.user}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="px-5 py-3.5">
+                            <span className="text-slate-600" style={{ fontSize: "0.78rem" }}>
+                              {log.details}
+                            </span>
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={4} className="px-5 py-10 text-center text-slate-400" style={{ fontSize: "0.8rem" }}>
+                          No records match the selected log_style.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
 
           {/* Pagination */}
@@ -623,6 +818,95 @@ export function ReportsAnalytics() {
             </div>
           </div>
         </div>
+
+        {/* Export Modal */}
+        {showExportModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-xl shadow-lg p-6 max-w-md w-full mx-4">
+              <h2 className="text-slate-800 text-lg font-bold mb-4">Export Report</h2>
+              
+              <div className="space-y-4">
+                {/* Report Type */}
+                <div>
+                  <label className="block text-slate-600 text-sm font-semibold mb-2">Report Type</label>
+                  <select
+                    value={selectedReportType}
+                    onChange={(e) => setSelectedReportType(e.target.value as any)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-700 outline-none focus:ring-2 focus:ring-emerald-400 focus:border-emerald-400"
+                  >
+                    <option value="operations">Operations Report</option>
+                    <option value="quality">Quality Report</option>
+                    <option value="incidents">Incidents Report</option>
+                  </select>
+                </div>
+
+                {/* File Format */}
+                <div>
+                  <label className="block text-slate-600 text-sm font-semibold mb-2">File Format</label>
+                  <select
+                    value={selectedFileFormat}
+                    onChange={(e) => setSelectedFileFormat(e.target.value as any)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-700 outline-none focus:ring-2 focus:ring-emerald-400 focus:border-emerald-400"
+                  >
+                    <option value="xlsx">Excel (.xlsx)</option>
+                    <option value="pdf">PDF (.pdf)</option>
+                    <option value="csv">CSV (.csv)</option>
+                  </select>
+                </div>
+
+                {/* Date Range */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-slate-600 text-sm font-semibold mb-2">From</label>
+                    <input
+                      type="date"
+                      value={dateFrom}
+                      onChange={(e) => setDateFrom(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-700 outline-none focus:ring-2 focus:ring-emerald-400 focus:border-emerald-400"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-600 text-sm font-semibold mb-2">To</label>
+                    <input
+                      type="date"
+                      value={dateTo}
+                      onChange={(e) => setDateTo(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-700 outline-none focus:ring-2 focus:ring-emerald-400 focus:border-emerald-400"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-3 mt-6">
+                <button
+                  onClick={() => setShowExportModal(false)}
+                  disabled={exportLoading}
+                  className="flex-1 px-4 py-2 border border-slate-200 text-slate-700 rounded-lg font-semibold hover:bg-slate-50 transition-colors disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmExport}
+                  disabled={exportLoading}
+                  className="flex-1 px-4 py-2 bg-emerald-600 text-white rounded-lg font-semibold hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  {exportLoading ? (
+                    <>
+                      <Loader size={16} className="animate-spin" />
+                      Exporting...
+                    </>
+                  ) : (
+                    <>
+                      <Download size={16} />
+                      Export
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -9,6 +9,7 @@ import { Login } from "./app/components/Login.tsx";
 import { PrivateRoute } from "./app/components/PrivateRoute.tsx";
 import { AuthProvider } from "./context/AuthContext.tsx";
 import { UserRole, Permission } from "./types/rbac.ts";
+import { Toaster } from "./app/components/ui/sonner.tsx";
 import "./styles/index.css";
 
 const router = createBrowserRouter([
@@ -18,77 +19,71 @@ const router = createBrowserRouter([
   },
   {
     path: "/",
+    element: <Navigate to="/login" replace />,
+  },
+  {
+    path: "/dashboard",
     element: (
       <PrivateRoute>
         <App />
       </PrivateRoute>
     ),
-    children: [
-      {
-        path: "dashboard",
-        element: (
-          <PrivateRoute>
-            <App />
-          </PrivateRoute>
-        ),
-      },
-      {
-        path: "devices",
-        element: (
-          <PrivateRoute>
-            <App />
-          </PrivateRoute>
-        ),
-      },
-      {
-        path: "automation",
-        element: (
-          <PrivateRoute requiredPermission={Permission.MANAGE_POLICIES}>
-            <App />
-          </PrivateRoute>
-        ),
-      },
-      {
-        path: "reports",
-        element: (
-          <PrivateRoute>
-            <App />
-          </PrivateRoute>
-        ),
-      },
-      {
-        path: "devices/:id",
-        element: (
-          <PrivateRoute>
-            <App />
-          </PrivateRoute>
-        ),
-      },
-      {
-        path: "user-management",
-        element: (
-          <PrivateRoute requiredRole={UserRole.ADMIN}>
-            <App />
-          </PrivateRoute>
-        ),
-      },
-      {
-        path: "role-management",
-        element: (
-          <PrivateRoute requiredRole={UserRole.ADMIN}>
-            <App />
-          </PrivateRoute>
-        ),
-      },
-      {
-        path: "settings",
-        element: (
-          <PrivateRoute requiredRole={UserRole.ADMIN}>
-            <App />
-          </PrivateRoute>
-        ),
-      }
-    ],
+  },
+  {
+    path: "/devices",
+    element: (
+      <PrivateRoute>
+        <App />
+      </PrivateRoute>
+    ),
+  },
+  {
+    path: "/devices/:id",
+    element: (
+      <PrivateRoute>
+        <App />
+      </PrivateRoute>
+    ),
+  },
+  {
+    path: "/automation",
+    element: (
+      <PrivateRoute requiredPermission={Permission.MANAGE_POLICIES}>
+        <App />
+      </PrivateRoute>
+    ),
+  },
+  {
+    path: "/reports",
+    element: (
+      <PrivateRoute>
+        <App />
+      </PrivateRoute>
+    ),
+  },
+  {
+    path: "/user-management",
+    element: (
+      <PrivateRoute requiredRole={UserRole.ADMIN}>
+        <App />
+      </PrivateRoute>
+    ),
+  },
+  {
+    path: "/role-management",
+    element: (
+      <PrivateRoute requiredRole={UserRole.ADMIN}>
+        <App />
+      </PrivateRoute>
+    ),
+  },
+  {
+    path: "/settings",
+    element: (
+      <PrivateRoute requiredRole={UserRole.ADMIN}>
+        <App />
+      </PrivateRoute>
+    ),
   },
   {
     path: "*",
@@ -99,6 +94,7 @@ const router = createBrowserRouter([
 createRoot(document.getElementById("root")!).render(
   <AuthProvider>
     <RouterProvider router={router} />
+    <Toaster richColors position="top-right" />
   </AuthProvider>
 );
   

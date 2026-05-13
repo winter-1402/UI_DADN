@@ -1,4 +1,6 @@
-import { Server, Activity, AlertTriangle, TrendingUp, CheckCircle, Clock, Zap } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Server, Activity, AlertTriangle, TrendingUp, CheckCircle, Clock, Zap, Loader2 } from "lucide-react";
+import { apiRequest, MONITORING_ENDPOINTS } from "../config/api.config";
 
 interface StatCard {
   title: string;
@@ -11,70 +13,125 @@ interface StatCard {
   accent?: string;
 }
 
-const stats: StatCard[] = [
-  {
-    title: "Machines Running",
-    value: 18,
-    subtitle: "Out of 24 total",
-    icon: <Activity size={22} />,
-    iconBg: "bg-emerald-100 text-emerald-600",
-    trend: "3 stopped, 3 alert",
-    trendUp: true,
-    accent: "border-l-emerald-500",
-  },
-  {
-    title: "Active Batches",
-    value: 12,
-    subtitle: "Running now",
-    icon: <Zap size={22} />,
-    iconBg: "bg-blue-100 text-blue-600",
-    trend: "4 finishing <2h",
-    trendUp: true,
-    accent: "border-l-blue-500",
-  },
-  {
-    title: "Batch Completion Rate",
-    value: "94.8%",
-    subtitle: "This week",
-    icon: <CheckCircle size={22} />,
-    iconBg: "bg-cyan-100 text-cyan-600",
-    trend: "+2.3% vs last week",
-    trendUp: true,
-    accent: "border-l-cyan-500",
-  },
-  {
-    title: "Avg Drying Time",
-    value: "11.8h",
-    subtitle: "All fruit types",
-    icon: <Clock size={22} />,
-    iconBg: "bg-orange-100 text-orange-600",
-    trend: "-0.6h vs 7-day avg",
-    trendUp: true,
-    accent: "border-l-orange-500",
-  },
-  {
-    title: "Threshold Alerts",
-    value: 3,
-    subtitle: "This week",
-    icon: <AlertTriangle size={22} />,
-    iconBg: "bg-red-100 text-red-600",
-    trend: "2 by Zone B",
-    trendUp: false,
-    accent: "border-l-red-500",
-  },
-  {
-    title: "Equipment Status",
-    value: "98.2%",
-    subtitle: "System uptime",
-    icon: <Server size={22} />,
-    iconBg: "bg-purple-100 text-purple-600",
-    trend: "No downtime today",
-    trendUp: true,
-    accent: "border-l-purple-500",
-  },
-];
+interface DashboardOverviewData {
+  running_dryers: number;
+  idle_dryers: number;
+  maintenance_dryers: number;
+  running_batches: number | null;
+  completed_batches: number | null;
+  failed_batches: number | null;
+  threshold_alert_rate: number;
+}
 
 export function StatsCards() {
+  const [data, setData] = useState<DashboardOverviewData | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const loadDashboardData = async () => {
+      try {
+        setLoading(true);
+        const response = await apiRequest('GET', MONITORING_ENDPOINTS.dashboard.overview);
+        setData(response.data);
+      } catch (error) {
+        console.error('Error loading dashboard data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadDashboardData();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {[1, 2, 3, 4, 5, 6].map((i) => (
+          <div
+            key={i}
+            className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm animate-pulse"
+          >
+            <div className="flex items-start justify-between">
+              <div className="space-y-2 flex-1">
+                <div className="h-4 bg-slate-200 rounded w-32"></div>
+                <div className="h-8 bg-slate-200 rounded w-16"></div>
+                <div className="h-3 bg-slate-100 rounded w-24"></div>
+              </div>
+              <div className="w-11 h-11 bg-slate-200 rounded-xl"></div>
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  // Calculate total dryers
+  const totalDryers = (data?.running_dryers || 0) + (data?.idle_dryers || 0) + (data?.maintenance_dryers || 0);
+  
+  // Build stats from API data
+  const stats: StatCard[] = [
+    {
+      title: "Machines Running",
+      value: data?.running_dryers || 0,
+      subtitle: `Out of ${totalDryers} total`,
+      icon: <Activity size={22} />,
+      iconBg: "bg-emerald-100 text-emerald-600",
+      trend: `${data?.maintenance_dryers || 0} maintenance, ${data?.idle_dryers || 0} idle`,
+      trendUp: (data?.running_dryers || 0) > 0,
+      accent: "border-l-emerald-500",
+    },
+    {
+      title: "Active Batches",
+      value: data?.running_batches ?? "—",
+      subtitle: "Running now",
+      icon: <Zap size={22} />,
+      iconBg: "bg-blue-100 text-blue-600",
+      trend: data?.running_batches ? "Processing" : "No active batches",
+      trendUp: (data?.running_batches || 0) > 0,
+      accent: "border-l-blue-500",
+    },
+    {
+      title: "Completed Batches",
+      value: data?.completed_batches ?? "—",
+      subtitle: "This period",
+      icon: <CheckCircle size={22} />,
+      iconBg: "bg-cyan-100 text-cyan-600",
+      trend: "Successfully completed",
+      trendUp: true,
+      accent: "border-l-cyan-500",
+    },
+    {
+      title: "Failed Batches",
+      value: data?.failed_batches ?? "—",
+      subtitle: "This period",
+      icon: <Clock size={22} />,
+      iconBg: "bg-orange-100 text-orange-600",
+      trend: data?.failed_batches ? "Review required" : "No failures",
+      trendUp: !(data?.failed_batches),
+      accent: "border-l-orange-500",
+    },
+    {
+      title: "Threshold Alert Rate",
+      value: `${(data?.threshold_alert_rate || 0).toFixed(1)}%`,
+      subtitle: "System alerts",
+      icon: <AlertTriangle size={22} />,
+      iconBg: "bg-red-100 text-red-600",
+      trend: data?.threshold_alert_rate ? "Alerts detected" : "No alerts",
+      trendUp: !(data?.threshold_alert_rate),
+      accent: "border-l-red-500",
+    },
+    {
+      title: "Maintenance Dryers",
+      value: data?.maintenance_dryers || 0,
+      subtitle: "In maintenance",
+      icon: <Server size={22} />,
+      iconBg: "bg-purple-100 text-purple-600",
+      trend: totalDryers > 0 ? "Operational" : "Idle",
+      trendUp: totalDryers > 0,
+      accent: "border-l-purple-500",
+    },
+  ];
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
       {stats.map((stat, i) => (
@@ -88,7 +145,7 @@ export function StatsCards() {
                 {stat.title}
               </p>
               <p
-                className={`${stat.title === "Critical Alerts" ? "text-red-600" : "text-slate-800"}`}
+                className={`${stat.title === "Threshold Alert Rate" && data?.threshold_alert_rate ? "text-red-600" : "text-slate-800"}`}
                 style={{ fontSize: "2rem", fontWeight: 800, lineHeight: 1.1 }}
               >
                 {stat.value}

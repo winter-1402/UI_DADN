@@ -25,7 +25,6 @@ import { Can, AdminOnly } from "@/components/permission/PermissionGuards";
 import {
   usePermission,
   useIsAdmin,
-  useCanAccessDryer,
 } from "@/hooks/usePermission";
 import { Permission } from "@/types/rbac";
 import { Button } from "./ui/button";
@@ -41,9 +40,6 @@ export function DryingManagementWithRBAC() {
   const canAdjustParameters = usePermission(Permission.ADJUST_PARAMETERS);
   const canToggleThreshold = usePermission(Permission.TOGGLE_THRESHOLD);
   const isAdmin = useIsAdmin();
-
-  // Check access to a specific dryer
-  const canAccessDryerA1 = useCanAccessDryer("dryer-a1");
 
   // Mock state
   const [selectedMachine, setSelectedMachine] = useState<string | null>(null);
