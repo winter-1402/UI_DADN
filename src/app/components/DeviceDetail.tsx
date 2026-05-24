@@ -750,6 +750,27 @@ export function DeviceDetail() {
                               {activeBatch.threshold_enabled ? "Có áp dụng" : "Không áp dụng"}
                             </span>
                           </div>
+                          {activeBatch.threshold_enabled && (
+                            <div className="p-2 rounded border border-slate-100 bg-purple-50 sm:col-span-2">
+                              <span className="text-slate-400 block">Ngưỡng thiết bị</span>
+                              <div className="mt-2 space-y-1">
+                                {(dryerData.sensors ?? []).map((sensor) => (
+                                  <div key={sensor.sensor_id} className="flex items-center justify-between text-xs">
+                                    <span className="text-slate-600 capitalize">
+                                      {sensor.sensor_type === "temperature" ? "Nhiệt độ" : sensor.sensor_type === "humidity" ? "Độ ẩm" : sensor.sensor_type}
+                                    </span>
+                                    <span className="font-semibold text-purple-700">
+                                      {sensor.threshold ?? "-"}
+                                      {sensor.sensor_type === "temperature" ? "°C" : sensor.sensor_type === "humidity" ? "%" : ""}
+                                    </span>
+                                  </div>
+                                ))}
+                                {(!dryerData.sensors || dryerData.sensors.length === 0) && (
+                                  <span className="text-xs text-slate-400">Không có cảm biến</span>
+                                )}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </div>
                     )}
