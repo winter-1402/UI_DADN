@@ -41,7 +41,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
             </div>
             <span style={{ fontSize: "0.8125rem", fontWeight: 700, color: entry.color }}>
               {entry.value}
-              {entry.name === "Temperature" ? "°C" : "%"}
+              {entry.name === "Temperature" ? "°C" : entry.name === "Humidity" ? "%" : entry.name === "Light" ? " lux" : ""}
             </span>
           </div>
         ))}
@@ -81,6 +81,7 @@ export function TrendChart({ dryId, machineLabel, onDataLoaded }: TrendChartProp
             time: point.time ? new Date(point.time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : `${idx}`,
             temperature: point.temperature ?? 0,
             humidity: point.humidity ?? 0,
+            light: point.light ?? 0,
           }));
           setData(transformedData);
           onDataLoaded?.(transformedData);
@@ -109,10 +110,10 @@ export function TrendChart({ dryId, machineLabel, onDataLoaded }: TrendChartProp
       <div className="flex items-start justify-between mb-4">
         <div>
           <h2 className="text-slate-800" style={{ fontWeight: 700, fontSize: "0.9375rem" }}>
-            Temp & Humidity Trends
+            Environmental Trends
           </h2>
           <p className="text-slate-400" style={{ fontSize: "0.75rem" }}>
-            {machineLabel ? `${machineLabel} — Sensor tracking` : "Environmental tracking"}
+            {machineLabel ? `${machineLabel} — Sensor tracking` : "Temperature, humidity & light monitoring"}
           </p>
         </div>
         {/* Date Range Dropdown */}
@@ -148,7 +149,7 @@ export function TrendChart({ dryId, machineLabel, onDataLoaded }: TrendChartProp
 
       {/* Summary pills */}
       {!loading && data.length > 0 && (
-      <div className="flex items-center gap-3 mb-4">
+      <div className="flex items-center gap-3 mb-4 flex-wrap">
         <div className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-50 rounded-lg border border-orange-100">
           <TrendingUp size={12} className="text-orange-500" />
           <span className="text-orange-700" style={{ fontSize: "0.72rem", fontWeight: 600 }}>
@@ -159,6 +160,12 @@ export function TrendChart({ dryId, machineLabel, onDataLoaded }: TrendChartProp
           <TrendingUp size={12} className="text-blue-500" />
           <span className="text-blue-700" style={{ fontSize: "0.72rem", fontWeight: 600 }}>
             Avg Humidity: {(data.reduce((s, d) => s + d.humidity, 0) / data.length).toFixed(1)}%
+          </span>
+        </div>
+        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-yellow-50 rounded-lg border border-yellow-100">
+          <TrendingUp size={12} className="text-yellow-500" />
+          <span className="text-yellow-700" style={{ fontSize: "0.72rem", fontWeight: 600 }}>
+            Avg Light: {(data.reduce((s, d) => s + d.light, 0) / data.length).toFixed(0)} lux
           </span>
         </div>
       </div>
@@ -203,6 +210,17 @@ export function TrendChart({ dryId, machineLabel, onDataLoaded }: TrendChartProp
             axisLine={false}
             tickFormatter={(v) => `${v}%`}
           />
+          <YAxis
+            key="y-axis-light"
+            yAxisId="light"
+            orientation="right"
+            domain={[0, 200]}
+            tick={{ fontSize: 10, fill: "#94a3b8" }}
+            tickLine={false}
+            axisLine={false}
+            tickFormatter={(v) => `${v}L`}
+            dx={10}
+          />
           <Tooltip key="tooltip" content={<CustomTooltip />} />
           <Legend
             key="legend"
@@ -241,6 +259,17 @@ export function TrendChart({ dryId, machineLabel, onDataLoaded }: TrendChartProp
             dot={false}
             strokeDasharray="0"
             activeDot={{ r: 5, fill: "#3b82f6" }}
+          />
+          <Line
+            key="line-light"
+            yAxisId="light"
+            type="monotone"
+            dataKey="light"
+            name="Light"
+            stroke="#eab308"
+            strokeWidth={2.5}
+            dot={false}
+            activeDot={{ r: 5, fill: "#eab308" }}
           />
         </LineChart>
       </ResponsiveContainer>

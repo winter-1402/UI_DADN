@@ -367,6 +367,7 @@ export function ReportsAnalytics({ batchId, appUserId }: ReportsAnalyticsProps =
   const dataToUse = trendChartData.length > 0 ? trendChartData : mockChartData;
   const avgTemp = (dataToUse.reduce((s, d) => s + d.temperature, 0) / dataToUse.length).toFixed(1);
   const avgHumid = (dataToUse.reduce((s, d) => s + d.humidity, 0) / dataToUse.length).toFixed(1);
+  const avgLight = (dataToUse.reduce((s, d) => s + (d.light ?? 0), 0) / dataToUse.length).toFixed(0);
 
   // Filtered logs
   const filteredLogs = useMemo(() => {
@@ -527,9 +528,10 @@ export function ReportsAnalytics({ batchId, appUserId }: ReportsAnalyticsProps =
         </div>
                   
         {/* Stats Pills */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <StatPill label="AVG TEMPERATURE" avg={`${avgTemp}°C`} trend="up" color="#f97316" icon={<Thermometer size={16} />} />
           <StatPill label="AVG HUMIDITY" avg={`${avgHumid}%`} trend="down" color="#3b82f6" icon={<Droplets size={16} />} />
+          <StatPill label="AVG LIGHT" avg={`${avgLight} lux`} trend="stable" color="#eab308" icon={<Sun size={16} />} />
         </div>
 
         {/* 30-Day Environmental Trends Chart */}

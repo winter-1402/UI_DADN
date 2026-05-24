@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { structureAPI, batchAPI, catalogAPI } from "../config/api.config";
 import { 
   ArrowLeft, Thermometer, Droplets, Wind, Lightbulb, Play, Pause, Square, Loader, AlertTriangle,
-  Clock, Calendar, Zap, Trash2, Save, CheckCircle2, Loader2, Plus, Sun, Cpu, Timer, ChevronDown
+  Clock, Calendar, Zap, Trash2, Save, CheckCircle2, Loader2, Plus, Sun, Cpu, Timer, ChevronDown, X
 } from "lucide-react";
 import { DryerDetail } from "../types/dryer";
 
@@ -116,6 +116,11 @@ export function DeviceDetail() {
   const [customPhases, setCustomPhases] = useState<any[]>([]);
   const [isSavingCustomPhases, setIsSavingCustomPhases] = useState(false);
 
+  // Threshold editing state
+  const [thresholdValue, setThresholdValue] = useState<number | string>("");
+  const [savingThresholdId, setSavingThresholdId] = useState<number | null>(null);
+  const [thresholdEnabled, setThresholdEnabled] = useState<Record<number, boolean>>({});
+
   // Choose the most relevant active batch (running > paused > scheduled/pending)
   const activeBatch = pickActiveBatch(batches);
 
@@ -159,6 +164,17 @@ export function DeviceDetail() {
   useEffect(() => {
     fetchBatches();
   }, [fetchBatches]);
+
+  // Initialize threshold enabled state from dryer data
+  useEffect(() => {
+    if (dryerData?.sensors) {
+      const enabledMap: Record<number, boolean> = {};
+      dryerData.sensors.forEach((sensor) => {
+        enabledMap[sensor.sensor_id] = sensor.threshold_enabled !== false;
+      });
+      setThresholdEnabled(enabledMap);
+    }
+  }, [dryerData?.sensors]);
 
   // Fetch fruit names for clear display by fruit_id
   useEffect(() => {
@@ -350,6 +366,45 @@ export function DeviceDetail() {
     }
   };
 
+  const handleSaveThreshold = async (sensorId: number) => {
+    if (thresholdValue === "") {
+      toast.error("Vui lòng nhập giá trị ngưỡng");
+      return;
+    }
+
+    setSavingThresholdId(sensorId);
+    try {
+      await structureAPI.sensors.update(sensorId, {
+        threshold: Number(thresholdValue),
+        threshold_enabled: thresholdEnabled[sensorId] !== false,
+      });
+      toast.success("Cập nhật ngưỡng thành công");
+      setThresholdValue("");
+      await fetchDryer();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Cập nhật ngưỡng thất bại");
+    } finally {
+      setSavingThresholdId(null);
+    }
+  };
+
+  const handleToggleThreshold = async (sensorId: number, currentEnabled: boolean) => {
+    const newEnabled = !currentEnabled;
+    setSavingThresholdId(sensorId);
+    try {
+      await structureAPI.sensors.update(sensorId, {
+        threshold_enabled: newEnabled,
+      });
+      setThresholdEnabled((prev) => ({ ...prev, [sensorId]: newEnabled }));
+      toast.success(newEnabled ? "Đã bật ngưỡng" : "Đã tắt ngưỡng");
+      await fetchDryer();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Cập nhật trạng thái ngưỡng thất bại");
+    } finally {
+      setSavingThresholdId(null);
+    }
+  };
+
   const handleAddControl = async (controlType: "fan" | "lamp") => {
     if (!dryerId || !dryerData) return;
 
@@ -498,36 +553,87 @@ export function DeviceDetail() {
               Input Sensors
             </h3>
             <div className="mt-3 space-y-2">
-              {(dryerData.sensors ?? []).map((sensor) => (
-                <div
-                  key={sensor.sensor_id}
-                  className="flex items-center justify-between gap-3 p-3 border rounded-lg bg-slate-50/60"
-                >
-                  <div className="flex items-start gap-3 min-w-0 flex-1">
-                    {sensor.sensor_type === "temperature" ? (
-                      <Thermometer size={16} className="text-orange-500 mt-0.5 shrink-0" />
-                    ) : sensor.sensor_type === "humidity" ? (
-                      <Droplets size={16} className="text-blue-500 mt-0.5 shrink-0" />
-                    ) : (
-                      <Thermometer size={16} className="mt-0.5 shrink-0" />
-                    )}
-                    <div className="min-w-0">
-                      <span className="text-slate-800 capitalize text-sm font-medium block">
-                        {sensor.sensor_type}
-                      </span>
-                      <p className="text-xs text-slate-400">Threshold: {sensor.threshold}</p>
-                      <p className="text-xs text-slate-400">
-                        Last updated: {sensor.updated_at ? new Date(sensor.updated_at).toLocaleTimeString() : "N/A"}
-                      </p>
+              {(dryerData.sensors ?? []).map((sensor) => {
+                const isEnabled = thresholdEnabled[sensor.sensor_id] !== false;
+                const isSaving = savingThresholdId === sensor.sensor_id;
+
+                return (
+                  <div
+                    key={sensor.sensor_id}
+                    className="p-3 border rounded-lg bg-slate-50/60 space-y-3"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-start gap-3 min-w-0 flex-1">
+                        {sensor.sensor_type === "temperature" ? (
+                          <Thermometer size={16} className="text-orange-500 mt-0.5 shrink-0" />
+                        ) : sensor.sensor_type === "humidity" ? (
+                          <Droplets size={16} className="text-blue-500 mt-0.5 shrink-0" />
+                        ) : sensor.sensor_type === "light" ? (
+                          <Sun size={16} className="text-yellow-500 mt-0.5 shrink-0" />
+                        ) : (
+                          <Thermometer size={16} className="mt-0.5 shrink-0" />
+                        )}
+                        <div className="min-w-0">
+                          <span className="text-slate-800 capitalize text-sm font-medium block">
+                            {sensor.sensor_type === "light" ? "Light" : sensor.sensor_type}
+                          </span>
+                          <p className="text-xs text-slate-400">
+                            Last updated: {sensor.updated_at ? new Date(sensor.updated_at).toLocaleTimeString() : "N/A"}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="shrink-0 min-w-[4.5rem] text-right">
+                        <span className="inline-flex items-center justify-center min-w-[4.5rem] px-2.5 py-1 rounded-md bg-emerald-50 text-emerald-700 font-bold">
+                          {sensor.last_value != null ? sensor.last_value.toFixed(2) : "N/A"}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Threshold Controls */}
+                    <div className="flex items-center gap-2 px-2 py-2 bg-white rounded border border-slate-200">
+                      <button
+                        onClick={() => handleToggleThreshold(sensor.sensor_id, isEnabled)}
+                        disabled={isSaving}
+                        className={`px-2 py-1 rounded text-xs font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                          isEnabled
+                            ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-200"
+                            : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                        }`}
+                      >
+                        {isSaving ? "..." : isEnabled ? "ON" : "OFF"}
+                      </button>
+
+                      <span className="text-xs text-slate-500">Ngưỡng:</span>
+                      <input
+                        type="number"
+                        defaultValue={sensor.threshold}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            const value = (e.currentTarget as HTMLInputElement).value;
+                            setThresholdValue(value);
+                            handleSaveThreshold(sensor.sensor_id);
+                          }
+                        }}
+                        onChange={(e) => setThresholdValue(e.currentTarget.value)}
+                        placeholder="0"
+                        disabled={isSaving}
+                        className="w-16 px-2 py-1 text-xs border border-slate-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                      />
+                      <button
+                        onClick={(e) => {
+                          const input = (e.currentTarget as HTMLElement).previousElementSibling as HTMLInputElement;
+                          setThresholdValue(input.value);
+                          handleSaveThreshold(sensor.sensor_id);
+                        }}
+                        disabled={isSaving}
+                        className="px-2 py-1 rounded text-xs font-semibold bg-blue-100 text-blue-700 hover:bg-blue-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {isSaving ? <Loader2 size={14} className="animate-spin" /> : "Lưu"}
+                      </button>
                     </div>
                   </div>
-                  <div className="shrink-0 min-w-[4.5rem] text-right">
-                    <span className="inline-flex items-center justify-center min-w-[4.5rem] px-2.5 py-1 rounded-md bg-emerald-50 text-emerald-700 font-bold">
-                      {sensor.last_value != null ? sensor.last_value.toFixed(2) : "N/A"}
-                    </span>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
               {(!dryerData.sensors || dryerData.sensors.length === 0) && (
                 <p className="text-sm text-slate-400">Chưa có cảm biến.</p>
               )}
