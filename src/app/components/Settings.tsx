@@ -14,6 +14,7 @@ import {
   Cpu,
   Target,
   Loader2,
+  Sun,
 } from "lucide-react";
 type ControlMode = "manual" | "threshold" | "automations_recipe";
 
@@ -584,6 +585,113 @@ export function Settings() {
                           />
                         </div>
                       ))}
+                    </div>
+                  )}
+
+                  {/* Light Sensor Configuration */}
+                  {dryerSensors.some((sensor: any) => sensor.sensor_type === "light") && (
+                    <div className="mt-6 pt-6 border-t border-slate-200">
+                      <div className="flex items-center gap-2 mb-4">
+                        <Sun size={15} className="text-yellow-500" />
+                        <label className="text-slate-700" style={{ fontSize: "0.8125rem", fontWeight: 600 }}>
+                          Light Sensor Configuration
+                        </label>
+                      </div>
+
+                      {(() => {
+                        const lightSensor = dryerSensors.find((s: any) => s.sensor_type === "light");
+                        if (!lightSensor) return null;
+
+                        return (
+                          <div className="space-y-4">
+                            {/* Current Light Reading */}
+                            <div className="bg-gradient-to-br from-yellow-50 to-amber-50 border border-yellow-200 rounded-lg p-4">
+                              <div className="flex items-center justify-between">
+                                <div>
+                                  <p className="text-slate-600 text-sm font-semibold">Current Light Level</p>
+                                  <p className="text-slate-500 text-xs mt-1">Last updated: {lightSensor.updated_at ? new Date(lightSensor.updated_at).toLocaleTimeString() : "N/A"}</p>
+                                </div>
+                                <div className="text-right">
+                                  <p className="text-3xl font-bold text-yellow-600">{lightSensor.last_value ?? "N/A"}</p>
+                                  <p className="text-xs text-slate-500">lux</p>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Light Threshold Settings */}
+                            <div className="bg-white border border-slate-200 rounded-lg p-4 space-y-4">
+                              <div>
+                                <label className="text-slate-700 text-sm font-semibold block mb-2">
+                                  Threshold Value (lux)
+                                </label>
+                                <input
+                                  type="number"
+                                  defaultValue={lightSensor.threshold ?? 0}
+                                  placeholder="e.g., 500"
+                                  className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-1 focus:ring-yellow-500"
+                                  style={{ fontSize: "0.8125rem" }}
+                                />
+                                <p className="text-slate-500 text-xs mt-2">Set the light intensity threshold for automated control</p>
+                              </div>
+
+                              <div>
+                                <label className="text-slate-700 text-sm font-semibold block mb-2">
+                                  Trigger Condition
+                                </label>
+                                <select
+                                  defaultValue={lightSensor.condition || "above"}
+                                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg outline-none focus:ring-1 focus:ring-yellow-500"
+                                  style={{ fontSize: "0.8125rem" }}
+                                >
+                                  <option value="above">When light is ABOVE threshold</option>
+                                  <option value="below">When light is BELOW threshold</option>
+                                </select>
+                              </div>
+
+                              <div>
+                                <label className="text-slate-700 text-sm font-semibold block mb-2">
+                                  Control Action
+                                </label>
+                                <select
+                                  defaultValue=""
+                                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg outline-none focus:ring-1 focus:ring-yellow-500"
+                                  style={{ fontSize: "0.8125rem" }}
+                                >
+                                  <option value="">Select action...</option>
+                                  <option value="turn_on_lamp">Turn on lamp</option>
+                                  <option value="turn_off_lamp">Turn off lamp</option>
+                                  <option value="dim_lamp">Dim lamp</option>
+                                  <option value="increase_ventilation">Increase ventilation</option>
+                                  <option value="alert">Send alert</option>
+                                </select>
+                              </div>
+
+                              <div className="flex items-center gap-2 p-3 bg-yellow-50 border border-yellow-100 rounded-lg">
+                                <input
+                                  type="checkbox"
+                                  id="light-enabled"
+                                  defaultChecked={lightSensor.threshold_enabled !== false}
+                                  className="rounded accent-yellow-500"
+                                />
+                                <label htmlFor="light-enabled" className="text-sm text-slate-700 cursor-pointer flex-1">
+                                  Enable light sensor control
+                                </label>
+                              </div>
+                            </div>
+
+                            {/* Light Sensor Range Info */}
+                            <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
+                              <p className="text-slate-600 font-semibold text-sm mb-2">Common Light Levels (Reference)</p>
+                              <div className="grid grid-cols-2 gap-2 text-xs text-slate-600">
+                                <div>Dark room: &lt;50 lux</div>
+                                <div>Office: 300-500 lux</div>
+                                <div>Bright room: 500-1000 lux</div>
+                                <div>Sunlight: &gt;10,000 lux</div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </div>
                   )}
 

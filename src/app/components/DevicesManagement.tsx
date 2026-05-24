@@ -23,6 +23,7 @@ import {
   Lightbulb,
   Activity,
   ChevronUp,
+  Sun,
 } from "lucide-react";
 
 type MachineStatus = "running" | "offline" | "alert";
@@ -49,8 +50,10 @@ function MachineCard({ machine, onToggle, onViewDetails, onDelete }: { machine: 
   const [showDetails, setShowDetails] = useState(false);
   const [freshTemp, setFreshTemp] = useState<number | null>(null);
   const [freshHumidity, setFreshHumidity] = useState<number | null>(null);
+  const [freshLight, setFreshLight] = useState<number | null>(null);
   const [tempThreshold, setTempThreshold] = useState<number | null>(null);
   const [humThreshold, setHumThreshold] = useState<number | null>(null);
+  const [lightThreshold, setLightThreshold] = useState<number | null>(null);
   const [localPowerOn, setLocalPowerOn] = useState(true);
   const s = statusConfig[machine.status];
 
@@ -69,11 +72,14 @@ function MachineCard({ machine, onToggle, onViewDetails, onDelete }: { machine: 
         
         const temperatureSensor = sensors.find((s: any) => s.sensor_type === 'temperature');
         const humiditySensor = sensors.find((s: any) => s.sensor_type === 'humidity');
+        const lightSensor = sensors.find((s: any) => s.sensor_type === 'light');
         
         setFreshTemp(temperatureSensor?.last_value ?? null);
         setFreshHumidity(humiditySensor?.last_value ?? null);
+        setFreshLight(lightSensor?.last_value ?? null);
         setTempThreshold(temperatureSensor?.threshold ?? null);
         setHumThreshold(humiditySensor?.threshold ?? null);
+        setLightThreshold(lightSensor?.threshold ?? null);
       } catch (error) {
         console.error(`Failed to fetch fresh dryer data for ${machine.name}:`, error);
         // Use fallback values from machine object
@@ -129,7 +135,7 @@ function MachineCard({ machine, onToggle, onViewDetails, onDelete }: { machine: 
         </span>
       </div>
 
-      {/* Temperature & Humidity Display */}
+      {/* Temperature & Humidity & Light Display */}
       <div className="px-4 pb-3 flex items-center gap-3">
         <div className="flex items-center gap-1.5 flex-1 bg-orange-50 rounded-lg px-2.5 py-1.5 border border-orange-100">
           <Thermometer size={14} className="text-orange-500" />
@@ -143,27 +149,35 @@ function MachineCard({ machine, onToggle, onViewDetails, onDelete }: { machine: 
             {(freshHumidity !== null ? freshHumidity : machine.humidity).toFixed(1)}%
           </span>
         </div>
+        <div className="flex items-center gap-1.5 flex-1 bg-yellow-50 rounded-lg px-2.5 py-1.5 border border-yellow-100">
+          <Sun size={14} className="text-yellow-500" />
+          <span className="text-yellow-700" style={{ fontSize: "0.8rem", fontWeight: 600 }}>
+            {(freshLight !== null ? freshLight : 0).toFixed(0)} lux
+          </span>
+        </div>
       </div>
 
       {/* Threshold Information */}
-      {(tempThreshold !== null || humThreshold !== null) && (
-        <div className="px-4 pb-3 flex items-center gap-3">
-          {tempThreshold !== null && (
-            <div className="flex items-center gap-1.5 flex-1 bg-orange-100 rounded-lg px-2.5 py-1.5 border border-orange-200">
-              <Thermometer size={12} className="text-orange-600" />
-              <span className="text-orange-600 text-xs font-medium">
-                Ngưỡng: {tempThreshold}°C
-              </span>
-            </div>
-          )}
-          {humThreshold !== null && (
-            <div className="flex items-center gap-1.5 flex-1 bg-blue-100 rounded-lg px-2.5 py-1.5 border border-blue-200">
-              <Droplets size={12} className="text-blue-600" />
-              <span className="text-blue-600 text-xs font-medium">
-                Ngưỡng: {humThreshold}%
-              </span>
-            </div>
-          )}
+      {(tempThreshold !== null || humThreshold !== null || lightThreshold !== null) && (
+        <div className="px-4 pb-3 grid grid-cols-3 gap-3">
+          <div className="flex items-center gap-1.5 bg-orange-100 rounded-lg px-2.5 py-1.5 border border-orange-200">
+            <Thermometer size={12} className="text-orange-600 shrink-0" />
+            <span className="text-orange-600 text-xs font-medium truncate">
+              Ngưỡng: {tempThreshold ?? 0}°C
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5 bg-blue-100 rounded-lg px-2.5 py-1.5 border border-blue-200">
+            <Droplets size={12} className="text-blue-600 shrink-0" />
+            <span className="text-blue-600 text-xs font-medium truncate">
+              Ngưỡng: {humThreshold ?? 0}%
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5 bg-yellow-100 rounded-lg px-2.5 py-1.5 border border-yellow-200">
+            <Sun size={12} className="text-yellow-600 shrink-0" />
+            <span className="text-yellow-600 text-xs font-medium truncate">
+              Ngưỡng: {lightThreshold ?? 0} lux
+            </span>
+          </div>
         </div>
       )}
 
