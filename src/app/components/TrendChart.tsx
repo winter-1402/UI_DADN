@@ -41,7 +41,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
             </div>
             <span style={{ fontSize: "0.8125rem", fontWeight: 700, color: entry.color }}>
               {entry.value}
-              {entry.name === "Temperature" ? "°C" : entry.name === "Humidity" ? "%" : entry.name === "Light" ? " lux" : ""}
+              {entry.name === "Temperature" ? "°C" : entry.name === "Humidity" ? "%" : entry.name === "Light" ? " %" : ""}
             </span>
           </div>
         ))}
@@ -165,7 +165,7 @@ export function TrendChart({ dryId, machineLabel, onDataLoaded }: TrendChartProp
         <div className="flex items-center gap-1.5 px-3 py-1.5 bg-yellow-50 rounded-lg border border-yellow-100">
           <TrendingUp size={12} className="text-yellow-500" />
           <span className="text-yellow-700" style={{ fontSize: "0.72rem", fontWeight: 600 }}>
-            Avg Light: {(data.reduce((s, d) => s + d.light, 0) / data.length).toFixed(0)} lux
+            Avg Light: {(data.reduce((s, d) => s + d.light, 0) / data.length).toFixed(0)} %
           </span>
         </div>
       </div>

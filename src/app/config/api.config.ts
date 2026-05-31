@@ -69,6 +69,15 @@ export const FACTORY_ENDPOINTS = {
     data: (sensorId: number) => `${API_BASE_URL}/sensors/${sensorId}/data`,  // GET: Get sensor data
   },
   
+  // Light Sensors (specialized endpoint for light sensor data)
+  lightSensors: {
+    list: `${API_BASE_URL}/sensors?sensor_type=light`,  // GET: List all light sensors
+    get: (sensorId: number) => `${API_BASE_URL}/sensors/${sensorId}`,  // GET: Get specific light sensor
+    getData: (sensorId: number, filters?: { from?: string; to?: string; limit?: number }) => 
+      `${API_BASE_URL}/sensors/${sensorId}/data${createQueryParams(filters || {})}`,  // GET: Get light sensor data with time range
+    getByDryer: (dryerId: number) => `${API_BASE_URL}/dryers/${dryerId}/sensors?sensor_type=light`,  // GET: Get light sensors for a dryer
+  },
+  
   // Controls
   controls: {
     list: `${API_BASE_URL}/controls`,            // GET: List controls (with optional dry_id filter)
@@ -335,7 +344,10 @@ export const structureAPI = {
       apiRequest('GET', `${FACTORY_ENDPOINTS.dryers.list}${createQueryParams(filters || {})}`),
     
     get: (dryerId: number) =>
-      apiRequest('GET', FACTORY_ENDPOINTS.dryers.get(dryerId))
+      apiRequest('GET', FACTORY_ENDPOINTS.dryers.get(dryerId)),
+    
+    update: (dryerId: number, data: Record<string, any>) =>
+      apiRequest('PATCH', FACTORY_ENDPOINTS.dryers.update(dryerId), data),
   },
   
   sensors: {
@@ -350,6 +362,20 @@ export const structureAPI = {
     update: (sensorId: number, value: number) =>
       apiRequest('POST', FACTORY_ENDPOINTS.sensors.update, { sensor_id: sensorId, value }),
 
+  },
+  
+  lightSensors: {
+    list: () =>
+      apiRequest('GET', FACTORY_ENDPOINTS.lightSensors.list),
+    
+    get: (sensorId: number) =>
+      apiRequest('GET', FACTORY_ENDPOINTS.lightSensors.get(sensorId)),
+    
+    getData: (sensorId: number, filters?: { from?: string; to?: string; limit?: number }) =>
+      apiRequest('GET', FACTORY_ENDPOINTS.lightSensors.getData(sensorId, filters)),
+    
+    getByDryer: (dryerId: number) =>
+      apiRequest('GET', FACTORY_ENDPOINTS.lightSensors.getByDryer(dryerId)),
   },
   
   controls: {

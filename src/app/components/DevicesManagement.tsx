@@ -54,7 +54,8 @@ function MachineCard({ machine, onToggle, onViewDetails, onDelete }: { machine: 
   const [tempThreshold, setTempThreshold] = useState<number | null>(null);
   const [humThreshold, setHumThreshold] = useState<number | null>(null);
   const [lightThreshold, setLightThreshold] = useState<number | null>(null);
-  const [localPowerOn, setLocalPowerOn] = useState(true);
+  const [localPowerOn, setLocalPowerOn] = useState(machine.isOn ?? true);
+  const [powerLoading, setPowerLoading] = useState(false);
   const s = statusConfig[machine.status];
 
   // Fetch fresh dryer data including temperature and humidity
@@ -80,6 +81,10 @@ function MachineCard({ machine, onToggle, onViewDetails, onDelete }: { machine: 
         setTempThreshold(temperatureSensor?.threshold ?? null);
         setHumThreshold(humiditySensor?.threshold ?? null);
         setLightThreshold(lightSensor?.threshold ?? null);
+        // Update power state from fetched data
+        if (dryerData?.is_on !== undefined) {
+          setLocalPowerOn(dryerData.is_on);
+        }
       } catch (error) {
         console.error(`Failed to fetch fresh dryer data for ${machine.name}:`, error);
         // Use fallback values from machine object
@@ -94,6 +99,34 @@ function MachineCard({ machine, onToggle, onViewDetails, onDelete }: { machine: 
     const interval = setInterval(fetchFreshDryerData, 10000);
     return () => clearInterval(interval);
   }, [machine.id, machine.name]);
+
+  // Handler for Master Power toggle - calls API to update dryer status
+  const handlePowerToggle = async (newPowerState: boolean) => {
+    try {
+      setPowerLoading(true);
+      const dryerId = Number(machine.id.replace(/^D/, ''));
+      if (!dryerId) {
+        toast.error("Không thể xác định ID máy");
+        return;
+      }
+
+      // Call API to update dryer status - update both is_on and status
+      await structureAPI.dryers.update(dryerId, {
+        is_on: newPowerState,
+        status: newPowerState ? "Running" : "Idle",
+      });
+
+      setLocalPowerOn(newPowerState);
+      toast.success(newPowerState ? "Bật máy thành công" : "Tắt máy thành công");
+    } catch (error) {
+      console.error("Error updating dryer power status:", error);
+      toast.error(error instanceof Error ? error.message : "Không thể cập nhật trạng thái máy");
+      // Revert to previous state on error
+      setLocalPowerOn(!newPowerState);
+    } finally {
+      setPowerLoading(false);
+    }
+  };
 
   return (
     <div className={`bg-white rounded-xl border shadow-sm hover:shadow-md transition-all duration-200 overflow-visible relative ${machine.status === "Idle" ? "border-red-200" : "border-slate-200"}`}>
@@ -135,31 +168,33 @@ function MachineCard({ machine, onToggle, onViewDetails, onDelete }: { machine: 
         </span>
       </div>
 
-      {/* Temperature & Humidity & Light Display */}
-      <div className="px-4 pb-3 flex items-center gap-3">
-        <div className="flex items-center gap-1.5 flex-1 bg-orange-50 rounded-lg px-2.5 py-1.5 border border-orange-100">
-          <Thermometer size={14} className="text-orange-500" />
-          <span className="text-orange-700" style={{ fontSize: "0.8rem", fontWeight: 600 }}>
-            {(freshTemp !== null ? freshTemp : machine.temp).toFixed(1)}°C
-          </span>
-        </div>
-        <div className="flex items-center gap-1.5 flex-1 bg-blue-50 rounded-lg px-2.5 py-1.5 border border-blue-100">
-          <Droplets size={14} className="text-blue-500" />
-          <span className="text-blue-700" style={{ fontSize: "0.8rem", fontWeight: 600 }}>
-            {(freshHumidity !== null ? freshHumidity : machine.humidity).toFixed(1)}%
-          </span>
-        </div>
-        <div className="flex items-center gap-1.5 flex-1 bg-yellow-50 rounded-lg px-2.5 py-1.5 border border-yellow-100">
-          <Sun size={14} className="text-yellow-500" />
-          <span className="text-yellow-700" style={{ fontSize: "0.8rem", fontWeight: 600 }}>
-            {(freshLight !== null ? freshLight : 0).toFixed(0)} lux
-          </span>
-        </div>
-      </div>
+      {/* Temperature & Humidity & Light Display - Only show if machine is not offline or if power is on */}
+      {(machine.status !== "offline" || localPowerOn) && (
+        <>
+          <div className="px-4 pb-3 flex items-center gap-3">
+            <div className="flex items-center gap-1.5 flex-1 bg-orange-50 rounded-lg px-2.5 py-1.5 border border-orange-100">
+              <Thermometer size={14} className="text-orange-500" />
+              <span className="text-orange-700" style={{ fontSize: "0.8rem", fontWeight: 600 }}>
+                {(freshTemp !== null ? freshTemp : machine.temp).toFixed(1)}°C
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5 flex-1 bg-blue-50 rounded-lg px-2.5 py-1.5 border border-blue-100">
+              <Droplets size={14} className="text-blue-500" />
+              <span className="text-blue-700" style={{ fontSize: "0.8rem", fontWeight: 600 }}>
+                {(freshHumidity !== null ? freshHumidity : machine.humidity).toFixed(1)}%
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5 flex-1 bg-yellow-50 rounded-lg px-2.5 py-1.5 border border-yellow-100">
+              <Sun size={14} className="text-yellow-500" />
+              <span className="text-yellow-700" style={{ fontSize: "0.8rem", fontWeight: 600 }}>
+                {(freshLight !== null ? freshLight : 0).toFixed(0)} %
+              </span>
+            </div>
+          </div>
 
-      {/* Threshold Information */}
-      {(tempThreshold !== null || humThreshold !== null || lightThreshold !== null) && (
-        <div className="px-4 pb-3 grid grid-cols-3 gap-3">
+          {/* Threshold Information */}
+          {(tempThreshold !== null || humThreshold !== null || lightThreshold !== null) && (
+            <div className="px-4 pb-3 grid grid-cols-3 gap-3">
           <div className="flex items-center gap-1.5 bg-orange-100 rounded-lg px-2.5 py-1.5 border border-orange-200">
             <Thermometer size={12} className="text-orange-600 shrink-0" />
             <span className="text-orange-600 text-xs font-medium truncate">
@@ -175,27 +210,35 @@ function MachineCard({ machine, onToggle, onViewDetails, onDelete }: { machine: 
           <div className="flex items-center gap-1.5 bg-yellow-100 rounded-lg px-2.5 py-1.5 border border-yellow-200">
             <Sun size={12} className="text-yellow-600 shrink-0" />
             <span className="text-yellow-600 text-xs font-medium truncate">
-              Ngưỡng: {lightThreshold ?? 0} lux
+              Ngưỡng: {lightThreshold ?? 0} %
             </span>
           </div>
         </div>
+          )}
+        </>
       )}
 
       <div className="px-4 pb-3 flex items-center justify-between">
-        <div>
-          <p className="text-slate-600" style={{ fontSize: "0.78rem", fontWeight: 600 }}>Master Power</p>
-          <p className="text-slate-400" style={{ fontSize: "0.68rem" }}>{localPowerOn ? `Active` : "Powered off"}</p>
-        </div>
-        <ToggleSwitch checked={localPowerOn} onChange={() => setLocalPowerOn(!localPowerOn)} />
+        {machine.status === "offline" ? (
+          <>
+            <div>
+              <p className="text-slate-600" style={{ fontSize: "0.78rem", fontWeight: 600 }}>Master Power</p>
+              <p className="text-slate-400" style={{ fontSize: "0.68rem" }}>Offline - Không khả dụng</p>
+            </div>
+            <ToggleSwitch checked={localPowerOn} onChange={handlePowerToggle} disabled={false} />
+          </>
+        ) : (
+          <>
+            <div>
+              <p className="text-slate-600" style={{ fontSize: "0.78rem", fontWeight: 600 }}>Master Power</p>
+              <p className="text-slate-400" style={{ fontSize: "0.68rem" }}>{localPowerOn ? `Active` : "Powered off"}</p>
+            </div>
+            <ToggleSwitch checked={localPowerOn} onChange={handlePowerToggle} disabled={powerLoading} />
+          </>
+        )}
       </div>
 
-          <button onClick={() => setShowDetails(!showDetails)} className="w-full px-4 transition-colors flex items-center justify-between"/>
-
-      <div className="border-t border-slate-100 px-4 py-2.5 flex items-center justify-between bg-slate-50 rounded-b-xl">
-        <span className="text-slate-500" style={{ fontSize: "0.7rem" }}>
-          <span className="text-slate-400">Mode: </span>
-          <span className={machine.mode === "auto" ? "text-emerald-600" : "text-amber-600"} style={{ fontWeight: 700 }}>{machine.mode === "auto" ? "Auto" : "Manual"}</span>
-        </span>
+      <div className="border-t border-slate-100 px-4 py-2.5 flex items-center justify-end bg-slate-50 rounded-b-xl">
         <button onClick={() => onViewDetails(machine.id)} className="flex items-center gap-0.5 text-emerald-600 hover:text-emerald-700 transition-all" style={{ fontSize: "0.7rem", fontWeight: 600 }}>
           Details <ChevronRight size={11} />
         </button>
@@ -221,7 +264,7 @@ function ZoneSection({ title, subtitle, machines, onToggle, onViewDetails, onDel
         <p className="text-slate-400" style={{ fontSize: "0.75rem" }}>{subtitle}</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 items-start">
         {machines.map((m) => <MachineCard key={m.id} machine={m} onToggle={onToggle} onViewDetails={onViewDetails} onDelete={onDelete} />)}
       </div>
     </div>

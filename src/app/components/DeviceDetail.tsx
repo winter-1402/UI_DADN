@@ -4,19 +4,18 @@ import { toast } from "sonner";
 import { structureAPI, batchAPI, catalogAPI } from "../config/api.config";
 import { 
   ArrowLeft, Thermometer, Droplets, Wind, Lightbulb, Play, Pause, Square, Loader, AlertTriangle,
-  Clock, Calendar, Zap, Trash2, Save, CheckCircle2, Loader2, Plus, Sun, Cpu, Timer, ChevronDown, X
+  Clock, Calendar, Zap, Trash2, Save, CheckCircle2, Loader2, Plus, Sun, Cpu, Timer, ChevronDown, X,
+  ArrowRight
 } from "lucide-react";
 import { DryerDetail } from "../types/dryer";
 
 type BatchStatus =
   | "pending"
-  | "scheduled"
   | "running"
   | "paused"
   | "completed"
   | "cancelled"
   | "aborted"
-  | "error"
   | string;
 
 interface BatchItem {
@@ -117,8 +116,12 @@ export function DeviceDetail() {
   const [isSavingCustomPhases, setIsSavingCustomPhases] = useState(false);
 
   // Threshold editing state
-  const [thresholdValue, setThresholdValue] = useState<number | string>("");
+  const [thresholdValues, setThresholdValues] = useState<Record<number, number | string>>({});
   const [savingThresholdId, setSavingThresholdId] = useState<number | null>(null);
+
+  // Dryers list state for dropdown filter
+  const [dryersList, setDryersList] = useState<any[]>([]);
+  const [loadingDryersList, setLoadingDryersList] = useState(false);
   const [thresholdEnabled, setThresholdEnabled] = useState<Record<number, boolean>>({});
 
   // Choose the most relevant active batch (running > paused > scheduled/pending)
@@ -165,12 +168,31 @@ export function DeviceDetail() {
     fetchBatches();
   }, [fetchBatches]);
 
+  // Fetch list of all dryers for dropdown filter
+  useEffect(() => {
+    const fetchDryersList = async () => {
+      try {
+        setLoadingDryersList(true);
+        const response = await structureAPI.dryers.list();
+        const list = response?.data ?? response ?? [];
+        setDryersList(Array.isArray(list) ? list : []);
+      } catch (err) {
+        console.error("Error fetching dryers list:", err);
+        setDryersList([]);
+      } finally {
+        setLoadingDryersList(false);
+      }
+    };
+
+    fetchDryersList();
+  }, []);
+
   // Initialize threshold enabled state from dryer data
   useEffect(() => {
     if (dryerData?.sensors) {
       const enabledMap: Record<number, boolean> = {};
       dryerData.sensors.forEach((sensor) => {
-        enabledMap[sensor.sensor_id] = sensor.threshold_enabled !== false;
+        enabledMap[sensor.sensor_id] = true; // Default to enabled
       });
       setThresholdEnabled(enabledMap);
     }
@@ -285,19 +307,34 @@ export function DeviceDetail() {
     setHumTarget(humSensor?.last_value ?? 0);
   }, [dryerData]);
 
-  // Load custom phases if batch is customized
+  // Load custom phases if batch is customized.
+  // Prefer phases stored on the active batch (batch-level custom phases).
+  // Fallback to recipeDetail.phases when batch doesn't include phases.
   useEffect(() => {
-    if (activeBatch?.is_customize && recipeDetail?.phases) {
-      setCustomPhases(recipeDetail.phases);
-    } else {
+    if (!activeBatch?.is_customize) {
       setCustomPhases([]);
+      return;
     }
-  }, [activeBatch?.is_customize, recipeDetail?.phases]);
+
+    // If the active batch itself contains phases (customized stored on batch), use them
+    if (Array.isArray((activeBatch as any).phases) && (activeBatch as any).phases.length > 0) {
+      setCustomPhases((activeBatch as any).phases);
+      return;
+    }
+
+    // Otherwise fall back to recipeDetail phases (if present)
+    if (Array.isArray(recipeDetail?.phases) && recipeDetail!.phases.length > 0) {
+      setCustomPhases(recipeDetail!.phases);
+      return;
+    }
+
+    setCustomPhases([]);
+  }, [activeBatch?.is_customize, (activeBatch as any)?.phases, recipeDetail?.phases]);
 
   // ---- Batch actions --------------------------------------------------------
   const runBatchAction = async (
     batchId: number,
-    action: "start" | "resume" | "abort",
+    action: "start" | "resume" | "pause" | "abort" | "completed",
     successMsg: string
   ) => {
     setBatchActionId(batchId);
@@ -306,10 +343,14 @@ export function DeviceDetail() {
         await batchAPI.start(batchId);
         toast.success(successMsg);
       } else if (action === "pause") {
-        await batchAPI.pause(batchId, "completed");
+        await batchAPI.pause(batchId, "paused");
         toast.success(successMsg);
       } else if (action === "abort") {
         await batchAPI.pause(batchId, "cancelled");
+        toast.success(successMsg);
+        await fetchBatches();
+      } else if (action === "completed") {
+        await batchAPI.pause(batchId, "completed");
         toast.success(successMsg);
         await fetchBatches();
       }
@@ -319,6 +360,42 @@ export function DeviceDetail() {
       setBatchActionId(null);
     }
   };
+
+  // Compute which phase is currently running based on batch start time and phase durations
+  const runningPhaseInfo = (() => {
+    if (!activeBatch) return { index: 0, phase: null, progressPercent: 0 };
+    // Try various possible start time fields on batch
+    const rawStart = (activeBatch as any).start_time || (activeBatch as any).started_at || activeBatch.created_at || null;
+   
+    if (!rawStart) return { index: 0, phase: recipeDetail?.phases[0] ?? null, progressPercent: 0 };
+const startMs = Date.parse(rawStart); 
+if (Number.isNaN(startMs)) throw new Error("Invalid date");
+ let diffMs = Date.now() - startMs; 
+
+    // Sum durations to find current phase
+    for (let i = 0; i < recipeDetail?.phases.length; i++) {
+      const ph = recipeDetail?.phases[i];
+      const durSec =
+        ph?.duration_seconds ??
+        (ph?.duration != null ? Math.round(Number(ph.duration) * 3600) :
+          (ph?.duration_minutes != null ? Math.round(Number(ph.duration_minutes) * 60) : 0));
+
+      if (durSec <= 0) {
+        // treat zero-duration as instant; skip
+        continue;
+      }
+
+      if (diffMs < durSec * 1000) {
+        const progressPercent = Math.round((diffMs / (durSec * 1000)) * 100);
+        return { index: i, phase: ph, progressPercent };
+      }
+      diffMs -= durSec * 1000;
+    }
+    if (diffMs < 0) {
+      return runBatchAction(activeBatch.batch_id, "completed", "Đã hoàn thành mẻ sấy");
+    }
+    return { index: recipeDetail?.phases.length - 1, phase: recipeDetail?.phases[recipeDetail.phases.length - 1], progressPercent: 100 };
+  })();
 
   const startBatch = (batchId: number) => runBatchAction(batchId, "start", "Đã bắt đầu mẻ sấy");
   const pauseBatch = (batchId: number) => runBatchAction(batchId, "pause", "Đã tạm dừng mẻ sấy");
@@ -367,19 +444,17 @@ export function DeviceDetail() {
   };
 
   const handleSaveThreshold = async (sensorId: number) => {
-    if (thresholdValue === "") {
+    if (thresholdValues[sensorId] === undefined || thresholdValues[sensorId] === "") {
       toast.error("Vui lòng nhập giá trị ngưỡng");
       return;
     }
 
     setSavingThresholdId(sensorId);
     try {
-      await structureAPI.sensors.update(sensorId, {
-        threshold: Number(thresholdValue),
-        threshold_enabled: thresholdEnabled[sensorId] !== false,
-      });
+      // API expects just a number for sensor update
+      await structureAPI.sensors.update(sensorId, Number(thresholdValues[sensorId]));
       toast.success("Cập nhật ngưỡng thành công");
-      setThresholdValue("");
+      setThresholdValues((prev) => ({ ...prev, [sensorId]: "" }));
       await fetchDryer();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Cập nhật ngưỡng thất bại");
@@ -389,20 +464,9 @@ export function DeviceDetail() {
   };
 
   const handleToggleThreshold = async (sensorId: number, currentEnabled: boolean) => {
-    const newEnabled = !currentEnabled;
-    setSavingThresholdId(sensorId);
-    try {
-      await structureAPI.sensors.update(sensorId, {
-        threshold_enabled: newEnabled,
-      });
-      setThresholdEnabled((prev) => ({ ...prev, [sensorId]: newEnabled }));
-      toast.success(newEnabled ? "Đã bật ngưỡng" : "Đã tắt ngưỡng");
-      await fetchDryer();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Cập nhật trạng thái ngưỡng thất bại");
-    } finally {
-      setSavingThresholdId(null);
-    }
+    // Threshold toggle feature requires API model update
+    // Currently disabled until API supports threshold_enabled property
+    toast.info("Tính năng này sẽ được cập nhật");
   };
 
   const handleAddControl = async (controlType: "fan" | "lamp") => {
@@ -428,6 +492,20 @@ export function DeviceDetail() {
       toast.error(err instanceof Error ? err.message : "Thêm output device thất bại");
     } finally {
       setCreatingControlType(null);
+    }
+  };
+
+  const handleThresholdToggle = async (enabled: boolean) => {
+    if (!activeBatch) return;
+    try {
+      await batchAPI.update(activeBatch.batch_id, {
+        threshold_enabled: enabled,
+      });
+      toast.success("Đã cập nhật ngưỡng thiết bị");
+      await fetchBatches();
+      await fetchDryer();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Cập nhật ngưỡng thất bại");
     }
   };
 
@@ -520,13 +598,41 @@ export function DeviceDetail() {
     <div className="flex-1 overflow-y-auto bg-slate-50 p-6">
       <div className="max-w-screen-lg mx-auto space-y-6">
         <div className="flex items-center justify-between">
-          <div>
+          <div className="flex items-center gap-4">
             <button
               onClick={() => navigate("/devices")}
               className="flex items-center gap-2 text-slate-600 mb-1"
             >
               <ArrowLeft /> Back
             </button>
+            
+            {/* Dryers Selector Dropdown */}
+            <div className="relative">
+              <select
+                value={dryerId || ""}
+                onChange={(e) => {
+                  const selectedId = e.target.value;
+                  if (selectedId) {
+                    navigate(`/devices/${selectedId}`);
+                  }
+                }}
+                disabled={loadingDryersList}
+                className="appearance-none px-4 py-2 bg-white border border-emerald-300 rounded-lg text-emerald-600 font-semibold text-sm cursor-pointer focus:outline-none focus:ring-2 focus:ring-emerald-400 hover:border-emerald-400 transition-colors"
+              >
+                <option value="">
+                  {loadingDryersList ? "Loading..." : "All Machines"}
+                </option>
+                {dryersList.map((dryer) => (
+                  <option key={dryer.dry_id} value={dryer.dry_id}>
+                    {dryer.dry_name}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown size={16} className="absolute right-2 top-1/2 transform -translate-y-1/2 text-emerald-600 pointer-events-none" />
+            </div>
+          </div>
+
+          <div>
             <h1 className="text-slate-800" style={{ fontWeight: 700 }}>
               {dryerData.dry_name}
             </h1>
@@ -589,48 +695,6 @@ export function DeviceDetail() {
                       </div>
                     </div>
 
-                    {/* Threshold Controls */}
-                    <div className="flex items-center gap-2 px-2 py-2 bg-white rounded border border-slate-200">
-                      <button
-                        onClick={() => handleToggleThreshold(sensor.sensor_id, isEnabled)}
-                        disabled={isSaving}
-                        className={`px-2 py-1 rounded text-xs font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-                          isEnabled
-                            ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-200"
-                            : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                        }`}
-                      >
-                        {isSaving ? "..." : isEnabled ? "ON" : "OFF"}
-                      </button>
-
-                      <span className="text-xs text-slate-500">Ngưỡng:</span>
-                      <input
-                        type="number"
-                        defaultValue={sensor.threshold}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            const value = (e.currentTarget as HTMLInputElement).value;
-                            setThresholdValue(value);
-                            handleSaveThreshold(sensor.sensor_id);
-                          }
-                        }}
-                        onChange={(e) => setThresholdValue(e.currentTarget.value)}
-                        placeholder="0"
-                        disabled={isSaving}
-                        className="w-16 px-2 py-1 text-xs border border-slate-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                      />
-                      <button
-                        onClick={(e) => {
-                          const input = (e.currentTarget as HTMLElement).previousElementSibling as HTMLInputElement;
-                          setThresholdValue(input.value);
-                          handleSaveThreshold(sensor.sensor_id);
-                        }}
-                        disabled={isSaving}
-                        className="px-2 py-1 rounded text-xs font-semibold bg-blue-100 text-blue-700 hover:bg-blue-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        {isSaving ? <Loader2 size={14} className="animate-spin" /> : "Lưu"}
-                      </button>
-                    </div>
                   </div>
                 );
               })}
@@ -780,7 +844,7 @@ export function DeviceDetail() {
                   </button>
                   <button
                     onClick={() => resumeBatch(activeBatch.batch_id)}
-                    disabled={batchActionId === activeBatch.batch_id || activeBatch.status !== "paused"}
+                    disabled={batchActionId === activeBatch.batch_id || !(activeBatch.status === "paused" || activeBatch.status === "pending")}
                     className="px-3 py-1.5 rounded text-xs font-semibold bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Tiếp tục
@@ -796,12 +860,6 @@ export function DeviceDetail() {
                       <p className="text-slate-800 font-bold text-sm">
                         Batch #{activeBatch.batch_id}
                       </p>
-                      <p className="text-slate-500 text-xs mt-1">
-                        Recipe: {recipeDisplayName}
-                      </p>
-                      <p className="text-slate-500 text-xs">
-                        Batch: {activeBatch.batch_id}
-                      </p>
                     </div>
                     <span
                       className={`inline-block px-2 py-1 rounded text-xs font-semibold ${batchStatusBadge(
@@ -811,22 +869,6 @@ export function DeviceDetail() {
                       {activeBatch.status}
                     </span>
                   </div>
-
-                  <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                    <div className="p-2 bg-white rounded border border-slate-200">
-                      <span className="text-slate-400 block">Fruit</span>
-                      <span className="text-slate-700 font-semibold">
-                        {fruitDisplayName}
-                      </span>
-                    </div>
-                    <div className="p-2 bg-white rounded border border-slate-200">
-                      <span className="text-slate-400 block">Mode</span>
-                      <span className="text-slate-700 font-semibold">
-                        {activeBatch.operation_mode ?? "-"}
-                      </span>
-                    </div>
-                  </div>
-
                   <div className="mt-3 p-3 bg-white rounded border border-slate-200">
                     <p className="text-slate-700 text-xs font-semibold">Thông tin áp dụng</p>
 
@@ -849,79 +891,107 @@ export function DeviceDetail() {
                             <span className="text-slate-400 block">Tên recipe</span>
                             <span className="text-slate-700 font-semibold">{recipeDisplayName}</span>
                           </div>
-                          <div className="p-2 rounded border border-slate-100 bg-slate-50 sm:col-span-2">
-                            <span className="text-slate-400 block">Chi tiết từng phase</span>
-                            {recipePhases.length === 0 ? (
-                              <span className="text-slate-700 font-semibold">Recipe chưa có phase</span>
-                            ) : (
-                              <div className="mt-2 space-y-2">
-                                {recipePhases.map((phase: any, index: number) => {
-                                  const phaseName =
-                                    phase?.phase_name ??
-                                    phase?.name ??
-                                    `Phase ${phase?.phase_number ?? index + 1}`;
-                                  const rawDurationSeconds =
-                                    phase?.duration_seconds ?? phase?.durationSeconds;
-                                  const rawDurationHours = phase?.duration;
-                                  const durationLabel =
-                                    typeof rawDurationSeconds === "number"
-                                      ? `${(rawDurationSeconds / 3600).toFixed(1)} giờ`
-                                      : typeof rawDurationHours === "number"
-                                        ? `${rawDurationHours} giờ`
-                                        : "-";
-                                  const targetTemp =
-                                    phase?.target_temperature ??
-                                    phase?.target_temp ??
-                                    phase?.temp;
-                                  const targetHumidity =
-                                    phase?.target_humidity ??
-                                    phase?.humidity_target ??
-                                    phase?.humidity;
-
-                                  return (
-                                    <div key={phase?.phase_id ?? phase?.id ?? index} className="rounded border border-slate-200 bg-white p-2">
-                                      <p className="text-slate-800 font-semibold">
-                                        {index + 1}. {phaseName}
-                                      </p>
-                                      <p className="text-slate-600 mt-1">
-                                        Thời lượng: {durationLabel} • Nhiệt độ: {targetTemp ?? "-"} • Độ ẩm: {targetHumidity ?? "-"}
-                                      </p>
-                                      {phase?.description && (
-                                        <p className="text-slate-500 mt-1 break-words">Mô tả: {phase.description}</p>
-                                      )}
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            )}
-                          </div>
-                          <div className="p-2 rounded border border-slate-100 bg-slate-50 sm:col-span-2">
+                  <div className="p-2 rounded border border-slate-100 bg-slate-50 sm:col-span-2">
                             <span className="text-slate-400 block">Chế độ ngưỡng</span>
                             <span className={`font-semibold ${activeBatch.threshold_enabled ? "text-purple-700" : "text-slate-700"}`}>
                               {activeBatch.threshold_enabled ? "Có áp dụng" : "Không áp dụng"}
                             </span>
                           </div>
-                          {activeBatch.threshold_enabled && (
-                            <div className="p-2 rounded border border-slate-100 bg-purple-50 sm:col-span-2">
-                              <span className="text-slate-400 block">Ngưỡng thiết bị</span>
-                              <div className="mt-2 space-y-1">
-                                {(dryerData.sensors ?? []).map((sensor) => (
-                                  <div key={sensor.sensor_id} className="flex items-center justify-between text-xs">
-                                    <span className="text-slate-600 capitalize">
-                                      {sensor.sensor_type === "temperature" ? "Nhiệt độ" : sensor.sensor_type === "humidity" ? "Độ ẩm" : sensor.sensor_type}
-                                    </span>
-                                    <span className="font-semibold text-purple-700">
-                                      {sensor.threshold ?? "-"}
-                                      {sensor.sensor_type === "temperature" ? "°C" : sensor.sensor_type === "humidity" ? "%" : ""}
-                                    </span>
-                                  </div>
-                                ))}
-                                {(!dryerData.sensors || dryerData.sensors.length === 0) && (
-                                  <span className="text-xs text-slate-400">Không có cảm biến</span>
-                                )}
-                              </div>
-                            </div>
-                          )}
+                          
+                        {/* Currently Running Phase */}
+              <div className="p-2 rounded border border-slate-100 bg-slate-50 sm:col-span-2">
+                <h3 className="text-slate-700" style={{ fontWeight: 1000, fontSize: "0.9375rem" }}>
+                  Phase Đang Chạy
+                </h3>
+
+                {activeBatch && runningPhaseInfo && (
+                  <div className="w-full bg-white rounded-lg border border-emerald-200 shadow-sm overflow-hidden">
+                    {/* Main Container */}
+                    <div className="w-full bg-gradient-to-r from-emerald-50 to-cyan-50 p-5 border-b border-emerald-200">
+                      {/* Phase Header */}
+                      <div className="flex items-center gap-3 mb-4">
+                        <span className="flex items-center justify-center w-10 h-10 rounded-full bg-emerald-500 text-white" style={{ fontSize: "0.9rem", fontWeight: 700 }}>
+                          {runningPhaseInfo.phase && runningPhaseInfo.index != null ? `P${runningPhaseInfo.index + 1}` : "P1"}
+                        </span>
+                        <div className="flex-1">
+                          <h4 className="text-emerald-700" style={{ fontSize: "1.125rem", fontWeight: 700 }}>
+                            {runningPhaseInfo.phase?.phase_name ?? runningPhaseInfo.phase?.name ?? `Phase ${runningPhaseInfo.index + 1}`}
+                          </h4>
+                          <p className="text-emerald-600 text-xs">
+                            Phase {runningPhaseInfo.index + 1} / {recipeDetail?.phases.length}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Progress Bar */}
+                      <div className="w-full bg-emerald-200 rounded-full h-3">
+                        <div 
+                          className="bg-emerald-500 h-3 rounded-full transition-all duration-300"
+                          style={{ width: `${Math.min(100, Math.max(0, runningPhaseInfo.progressPercent || 0))}%` }}
+                        ></div>
+                      </div>
+                    </div>
+
+                    {/* Phase Info Cards */}
+                    <div className="w-full p-5">
+                      <div className="grid grid-cols-2 gap-5 w-full">
+                        {/* Active Devices */}
+                        <div className="bg-slate-50 rounded-lg border border-slate-200 p-5 w-full">
+                          <div className="flex items-center gap-2 mb-4">
+                            <Cpu size={18} className="text-emerald-600" />
+                            <span className="text-slate-700 text-sm font-semibold">Thiết bị hoạt động</span>
+                          </div>
+                          <div className="space-y-3 min-h-[50px]">
+                            {runningPhaseInfo.phase?.actions && 
+                             runningPhaseInfo.phase?.actions.length > 0 ? (
+                              <>
+                                {runningPhaseInfo.phase?.actions
+                                  .filter((a: any) => a.action_type === "activate")
+                                  .map((action: any, i: number) => (
+                                    <div key={i} className="flex items-center gap-2">
+                                      {action.control_type === "fan" && (
+                                        <>
+                                          <Wind size={18} className="text-blue-500" />
+                                          <span className="text-blue-700 text-sm font-semibold">Fan: ON</span>
+                                        </>
+                                      )}
+                                      {action.control_type === "lamp" && (
+                                        <>
+                                          <Lightbulb size={18} className="text-amber-500" />
+                                          <span className="text-amber-700 text-sm font-semibold">Light: ON</span>
+                                        </>
+                                      )}
+                                    </div>
+                                  ))}
+                              </>
+                            ) : (
+                              <span className="text-slate-400 text-sm">Không có thiết bị</span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Duration Info */}
+                        <div className="bg-slate-50 rounded-lg border border-slate-200 p-5 w-full">
+                          <div className="flex items-center gap-2 mb-4">
+                            <Clock size={18} className="text-emerald-600" />
+                            <span className="text-slate-700 text-sm font-semibold">Thời lượng</span>
+                          </div>
+                              <div className="min-h-[50px] flex items-center">
+                            <span className="text-emerald-700 font-bold text-2xl">
+                              {runningPhaseInfo.phase?.duration 
+                                ? Math.round(runningPhaseInfo.phase.duration * 60) 
+                                : runningPhaseInfo.phase?.duration_seconds
+                                  ? Math.round(runningPhaseInfo.phase.duration_seconds / 60)
+                                  : 0} phút
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+                  
                         </div>
                       </div>
                     )}
@@ -930,7 +1000,118 @@ export function DeviceDetail() {
               )}
             </div>
           )}
+                        
+                          {activeBatch  && (
+                            <div className="bg-white rounded-xl border p-4 md:col-span-2">
+                            <div className="p-3 rounded border border-slate-100 bg-purple-50 sm:col-span-2">
+                              <div className="flex items-center justify-between mb-4">
+                                <span className="text-slate-800 font-bold">Ngưỡng thiết bị</span>
+                                {activeBatch.threshold_enabled ? (
+                                  <button 
+                                    onClick={() => handleThresholdToggle(false)}
+                                    className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-red-500 hover:bg-red-600 text-white transition-all"
+                                  >
+                                    ✕ Tắt ngưỡng
+                                  </button>
+                                ) : (
+                                <button
+                                  onClick={() => handleThresholdToggle(true)}
+                                  className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-green-500 text-white opacity-50 cursor-not-allowed"
+                                >
+                                  ✓ Bật ngưỡng
+                                </button>
+                                )
+                                }
+                                
 
+
+                              </div>
+                              
+                              <div className="space-y-3">
+                                {(dryerData.sensors ?? []).map((sensor) => (
+                                  <div key={sensor.sensor_id} className="bg-white rounded border border-slate-200 p-3">
+                                    {/* Header với tên sensor và giá trị hiện tại */}
+                                    <div className="flex items-center justify-between gap-3 mb-2">
+                                      <div className="flex items-center gap-3">
+                                        {sensor.sensor_type === "temperature" ? (
+                                          <Thermometer size={16} className="text-orange-500 shrink-0" />
+                                        ) : sensor.sensor_type === "humidity" ? (
+                                          <Droplets size={16} className="text-blue-500 shrink-0" />
+                                        ) : (
+                                          <Sun size={16} className="text-yellow-500 shrink-0" />
+                                        )}
+                                        <div>
+                                          <p className="text-slate-800 font-semibold text-sm capitalize">
+                                            Ngưỡng {sensor.sensor_type === "temperature" ? "nhiệt độ" : sensor.sensor_type === "humidity" ? "độ ẩm" : "light"} hiện tại là: <span className="text-purple-700">{sensor.threshold ?? "-"}{sensor.sensor_type === "temperature" ? "°C" : "%" }</span>
+                                          </p>
+                                        </div>
+                                      </div>
+                                    </div>
+                                    
+                                    {/* Chọn hành động khi vượt ngưỡng */}
+                                    <div className="mb-2">
+                                      <label className="text-xs text-slate-600 block mb-1">Hành động khi vượt ngưỡng</label>
+                                      <select className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-purple-400">
+                                        <option value="">-- Chọn hành động --</option>
+                                        <option value="stop">Dừng máy</option>
+                                        <option value="alarm">Báo động</option>
+                                        <option value="notify">Gửi thông báo</option>
+                                        <option value="adjust">Điều chỉnh tự động</option>
+                                      </select>
+                                    </div>
+                                    
+                                    {/* Input để điều chỉnh */}
+                                    <div className="flex items-end gap-2">
+                                      <div className="flex-1">
+                                        <label className="text-xs text-slate-600 block mb-1">Giá trị mới</label>
+                                        <div className="flex items-center gap-1">
+                                          <input
+                                            type="number"
+                                            value={thresholdValues[sensor.sensor_id] ?? ""}
+                                            onChange={(e) => setThresholdValues({...thresholdValues, [sensor.sensor_id]: e.target.value})}
+                                            placeholder={sensor.threshold?.toString() || "0"}
+                                            className="flex-1 px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-purple-400"
+                                            step={sensor.sensor_type === "temperature" ? "0.1" : "1"}
+                                            disabled={savingThresholdId === sensor.sensor_id}
+                                          />
+                                          <span className="text-sm text-slate-500 font-medium shrink-0">
+                                            {sensor.sensor_type === "temperature" ? "°C" : "%"}
+                                          </span>
+                                        </div>
+                                      </div>
+                                      <button
+                                        onClick={() => handleSaveThreshold(sensor.sensor_id)}
+                                        disabled={savingThresholdId === sensor.sensor_id || !thresholdValues[sensor.sensor_id]}
+                                        className={`px-3 py-2 rounded-lg text-sm font-semibold transition-all flex items-center gap-1.5 shrink-0 ${
+                                          savingThresholdId === sensor.sensor_id
+                                            ? "bg-slate-300 text-slate-500 cursor-not-allowed"
+                                            : thresholdValues[sensor.sensor_id]
+                                              ? "bg-purple-500 hover:bg-purple-600 text-white"
+                                              : "bg-slate-200 text-slate-400 cursor-not-allowed"
+                                        }`}
+                                      >
+                                        {savingThresholdId === sensor.sensor_id ? (
+                                          <>
+                                            <Loader2 size={14} className="animate-spin" />
+                                            <span>Lưu</span>
+                                          </>
+                                        ) : (
+                                          <>
+                                            <Save size={14} />
+                                            <span>Lưu</span>
+                                          </>
+                                        )}
+                                      </button>
+                                    </div>
+                                  </div>
+                                ))}
+                                {(!dryerData.sensors || dryerData.sensors.length === 0) && (
+                                  <span className="text-sm text-slate-400">Không có cảm biến để điều chỉnh</span>
+                                )}
+                              </div>
+                            </div>
+                            </div>
+                          )}       
           {/* Customized Phase Editor - Show only if batch is customized */}
           {!loadingBatches && activeBatch && activeBatch.is_customize && customPhases.length > 0 && (
             <div className="bg-white rounded-xl border p-4 md:col-span-2">
@@ -965,175 +1146,132 @@ export function DeviceDetail() {
                 </button>
               </div>
 
-              {/* Phase Cards */}
-              <div className="grid grid-flow-col auto-cols-[minmax(300px,1fr)] gap-3 overflow-x-auto pb-2">
-                {customPhases.map((phase: any, idx: number) => (
-                  <div key={phase?.phase_id ?? idx} className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden">
-                    {/* Phase Header */}
-                    <div className="bg-slate-50 px-4 py-3 border-b border-slate-100">
-                      <div className="flex items-center gap-2">
-                        <span className="flex items-center justify-center w-6 h-6 rounded-full bg-emerald-500 text-white" style={{ fontSize: "0.7rem", fontWeight: 700 }}>
-                          {idx + 1}
-                        </span>
-                        <input
-                          type="text"
-                          value={phase?.phase_name ?? phase?.name ?? `Phase ${idx + 1}`}
-                          onChange={(e) => handlePhaseChange(idx, "phase_name", e.target.value)}
-                          className="bg-transparent text-slate-800 outline-none border-b border-transparent hover:border-emerald-300 focus:border-emerald-500 transition-all flex-1"
-                          style={{ fontSize: "0.875rem", fontWeight: 700 }}
-                        />
-                      </div>
+              {/* Shared Schedule Settings - Outside Phase Cards */}
+              <div className="bg-white rounded-lg border border-slate-200 p-3 mb-4">
+                {/* Schedule Type */}
+                <div className="pt-2 border-t border-slate-100">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <Calendar size={14} className="text-slate-500" />
+                      <span className="text-slate-700" style={{ fontSize: "0.8rem", fontWeight: 600 }}>
+                        Loại lịch
+                      </span>
                     </div>
+                    <select
+                      value={customPhases[0]?.schedule_type ?? "fixed"}
+                      onChange={(e) => handlePhaseChange(0, "schedule_type", e.target.value)}
+                      className="px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-emerald-400"
+                      style={{ fontSize: "0.7rem" }}
+                    >
+                      <option value="fixed">Thời gian cố định</option>
+                      <option value="recurring">Lặp lại</option>
+                    </select>
+                  </div>
+                </div>
 
-                    {/* Phase Config */}
-                    <div className="p-4 space-y-3">
-                      {/* Temperature */}
-                      <div>
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="flex items-center gap-2">
-                            <Thermometer size={14} className="text-orange-500" />
-                            <span className="text-slate-700" style={{ fontSize: "0.8rem", fontWeight: 600 }}>
-                              Nhiệt độ
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <input
-                              type="number"
-                              value={phase?.target_temperature ?? phase?.temperature ?? 0}
-                              onChange={(e) => handlePhaseChange(idx, "target_temperature", Number(e.target.value))}
-                              className="w-16 px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-orange-400 text-right"
-                              style={{ fontSize: "0.75rem" }}
-                              min={20}
-                              max={100}
-                            />
-                            <span className="text-slate-400" style={{ fontSize: "0.75rem" }}>°C</span>
-                          </div>
-                        </div>
+                {/* Fixed Time */}
+                {(customPhases[0]?.schedule_type ?? "fixed") === "fixed" && (
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <Clock size={14} className="text-emerald-500" />
+                        <span className="text-slate-700" style={{ fontSize: "0.8rem", fontWeight: 600 }}>
+                          Giờ bắt đầu
+                        </span>
                       </div>
-
-                      {/* Humidity */}
-                      <div>
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="flex items-center gap-2">
-                            <Droplets size={14} className="text-blue-500" />
-                            <span className="text-slate-700" style={{ fontSize: "0.8rem", fontWeight: 600 }}>
-                              Độ ẩm
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <input
-                              type="number"
-                              value={phase?.target_humidity ?? phase?.humidity ?? 0}
-                              onChange={(e) => handlePhaseChange(idx, "target_humidity", Number(e.target.value))}
-                              className="w-16 px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-400 text-right"
-                              style={{ fontSize: "0.75rem" }}
-                              min={10}
-                              max={100}
-                            />
-                            <span className="text-slate-400" style={{ fontSize: "0.75rem" }}>%</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Duration */}
-                      <div>
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="flex items-center gap-2">
-                            <Clock size={14} className="text-slate-500" />
-                            <span className="text-slate-700" style={{ fontSize: "0.8rem", fontWeight: 600 }}>
-                              Thời gian
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <input
-                              type="number"
-                              step="0.5"
-                              value={
-                                phase?.duration_seconds
-                                  ? (phase.duration_seconds / 3600).toFixed(1)
-                                  : phase?.duration ?? 0
-                              }
-                              onChange={(e) => handlePhaseChange(idx, "duration_seconds", Number(e.target.value) * 3600)}
-                              className="w-16 px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-slate-400 text-right"
-                              style={{ fontSize: "0.75rem" }}
-                              min={0.5}
-                              max={24}
-                            />
-                            <span className="text-slate-400" style={{ fontSize: "0.75rem" }}>giờ</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Schedule Type */}
-                      <div className="pt-2 border-t border-slate-100">
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="flex items-center gap-2">
-                            <Calendar size={14} className="text-slate-500" />
-                            <span className="text-slate-700" style={{ fontSize: "0.8rem", fontWeight: 600 }}>
-                              Loại lịch
-                            </span>
-                          </div>
-                          <select
-                            value={phase?.schedule_type ?? "fixed"}
-                            onChange={(e) => handlePhaseChange(idx, "schedule_type", e.target.value)}
-                            className="px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-emerald-400"
-                            style={{ fontSize: "0.7rem" }}
-                          >
-                            <option value="fixed">Thời gian cố định</option>
-                            <option value="recurring">Lặp lại</option>
-                          </select>
-                        </div>
-                      </div>
-
-                      {/* Fixed Time */}
-                      {(phase?.schedule_type ?? "fixed") === "fixed" && (
-                        <div>
-                          <div className="flex items-center justify-between mb-2">
-                            <div className="flex items-center gap-2">
-                              <Clock size={14} className="text-emerald-500" />
-                              <span className="text-slate-700" style={{ fontSize: "0.8rem", fontWeight: 600 }}>
-                                Giờ bắt đầu
-                              </span>
-                            </div>
-                            <input
-                              type="time"
-                              value={phase?.fixed_time ?? "08:00"}
-                              onChange={(e) => handlePhaseChange(idx, "fixed_time", e.target.value)}
-                              className="px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-emerald-400"
-                              style={{ fontSize: "0.7rem" }}
-                            />
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Recurring Interval */}
-                      {(phase?.schedule_type ?? "fixed") === "recurring" && (
-                        <div>
-                          <div className="flex items-center justify-between mb-2">
-                            <div className="flex items-center gap-2">
-                              <Zap size={14} className="text-amber-500" />
-                              <span className="text-slate-700" style={{ fontSize: "0.8rem", fontWeight: 600 }}>
-                                Chu kỳ
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <input
-                                type="number"
-                                value={phase?.recurring_interval ?? 8}
-                                onChange={(e) => handlePhaseChange(idx, "recurring_interval", Number(e.target.value))}
-                                className="w-16 px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-amber-400 text-right"
-                                style={{ fontSize: "0.7rem" }}
-                                min={1}
-                                max={24}
-                              />
-                              <span className="text-slate-400" style={{ fontSize: "0.7rem" }}>giờ</span>
-                            </div>
-                          </div>
-                        </div>
-                      )}
+                      <input
+                        type="time"
+                        value={customPhases[0]?.fixed_time ?? "08:00"}
+                        onChange={(e) => handlePhaseChange(0, "fixed_time", e.target.value)}
+                        className="px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-emerald-400"
+                        style={{ fontSize: "0.7rem" }}
+                      />
                     </div>
                   </div>
-                ))}
+                )}
+
+                {/* Recurring Interval */}
+                {(customPhases[0]?.schedule_type ?? "fixed") === "recurring" && (
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <Zap size={14} className="text-amber-500" />
+                        <span className="text-slate-700" style={{ fontSize: "0.8rem", fontWeight: 600 }}>
+                          Chu kỳ
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="number"
+                          value={customPhases[0]?.recurring_interval ?? 8}
+                          onChange={(e) => handlePhaseChange(0, "recurring_interval", Number(e.target.value))}
+                          className="w-16 px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-amber-400 text-right"
+                          style={{ fontSize: "0.7rem" }}
+                          min={1}
+                          max={24}
+                        />
+                        <span className="text-slate-400" style={{ fontSize: "0.7rem" }}>giờ</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Phase Cards */}
+              <div className="grid grid-flow-col auto-cols-[250px] gap-3 overflow-x-auto pb-2">
+                {customPhases.map((phase: any, idx: number) => {
+                  // Calculate duration in minutes
+                  const durationMinutes = phase?.duration 
+                    ? Math.round(phase.duration * 60) 
+                    : phase?.duration_seconds 
+                      ? Math.round(phase.duration_seconds / 60)
+                      : 0;
+
+                  return (
+                    <div key={phase?.phase_id ?? idx} className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden flex flex-col">
+                      {/* Phase Header */}
+                      <div className="bg-slate-50 px-4 py-3 border-b border-slate-100">
+                        <div className="flex items-center gap-2">
+                          <span className="flex items-center justify-center w-6 h-6 rounded-full bg-emerald-500 text-white" style={{ fontSize: "0.7rem", fontWeight: 700 }}>
+                            {idx + 1}
+                          </span>
+                          <span className="text-slate-800 text-sm" style={{ fontWeight: 700 }}>
+                            {phase?.phase_name ?? phase?.name ?? `Phase ${idx + 1}`}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Phase Content */}
+                      <div className="flex-1 p-4 space-y-3">
+                        {/* Devices & Duration Info */}
+                        <div className="bg-slate-50 rounded-lg border border-slate-200 p-2.5 space-y-2">
+                          <div className="flex items-center justify-center gap-2 min-h-[24px]">
+                            {phase?.actions && phase.actions.length > 0 ? (
+                              <>
+                                {phase.actions.filter((a: any) => a.action_type === "activate").map((action: any, i: number) => (
+                                  <div key={i} title={action.control_type}>
+                                    {action.control_type === "fan" && <Wind size={16} className="text-amber-500" />}
+                                    {action.control_type === "lamp" && <Lightbulb size={16} className="text-yellow-500" />}
+                                  </div>
+                                ))}
+                              </>
+                            ) : (
+                              <span className="text-slate-400 text-xs">No devices</span>
+                            )}
+                          </div>
+
+                          <div className="flex items-center justify-between pt-1.5 border-t border-slate-200">
+                            <span className="text-slate-500 text-xs">Time:</span>
+                            <span className="text-slate-700 text-xs font-semibold">
+                              {durationMinutes} phút
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                
+                })}
               </div>
             </div>
             

@@ -32,7 +32,7 @@ import {
   Search,
   Loader,
 } from "lucide-react";
-import { monitoringAPI } from "../config/api.config";
+import { monitoringAPI, structureAPI } from "../config/api.config";
 
 // ── Data Generation ──────────────────────────────────────────────────────────
 
@@ -290,6 +290,8 @@ export function ReportsAnalytics({ batchId, appUserId }: ReportsAnalyticsProps =
   const [logs, setLogs] = useState<ActivityLog[]>([]);
   const [logsLoading, setLogsLoading] = useState(false);
   const [logsError, setLogsError] = useState<string | null>(null);
+  const [dryers, setDryers] = useState<Array<{ dry_id: number; dry_name: string }>>([]);
+  const [dryersLoading, setDryersLoading] = useState(false);
 
   const resolvedAppUserId = appUserId ?? getStoredAppUserId();
 
@@ -357,6 +359,24 @@ export function ReportsAnalytics({ batchId, appUserId }: ReportsAnalyticsProps =
     fetchLogs();
   }, [resolvedAppUserId]);
 
+  useEffect(() => {
+    const fetchDryers = async () => {
+      try {
+        setDryersLoading(true);
+        const response = await structureAPI.dryers.list();
+        const list = response?.data ?? response ?? [];
+        setDryers(Array.isArray(list) ? list : []);
+      } catch (err) {
+        console.error("Error fetching dryers list:", err);
+        setDryers([]);
+      } finally {
+        setDryersLoading(false);
+      }
+    };
+
+    fetchDryers();
+  }, []);
+
   const days = dateRange === "7d" ? 7 : dateRange === "14d" ? 14 : dateRange === "60d" ? 60 : 30;
   const mockChartData = useMemo(() => generateDailyData(days), [days]);
   
@@ -368,6 +388,10 @@ export function ReportsAnalytics({ batchId, appUserId }: ReportsAnalyticsProps =
   const avgTemp = (dataToUse.reduce((s, d) => s + d.temperature, 0) / dataToUse.length).toFixed(1);
   const avgHumid = (dataToUse.reduce((s, d) => s + d.humidity, 0) / dataToUse.length).toFixed(1);
   const avgLight = (dataToUse.reduce((s, d) => s + (d.light ?? 0), 0) / dataToUse.length).toFixed(0);
+  const selectedDryer = useMemo(
+    () => dryers.find((dryer) => String(dryer.dry_id) === zoneMachine) ?? null,
+    [dryers, zoneMachine]
+  );
 
   // Filtered logs
   const filteredLogs = useMemo(() => {
@@ -489,10 +513,12 @@ export function ReportsAnalytics({ batchId, appUserId }: ReportsAnalyticsProps =
                   className="appearance-none bg-slate-50 border border-slate-200 text-slate-700 rounded-lg pl-3 pr-8 py-2 outline-none focus:ring-2 focus:ring-emerald-400 focus:border-emerald-400 cursor-pointer transition-all"
                   style={{ fontSize: "0.8125rem", fontWeight: 500 }}
                 >
-                  <option value="all">All Machines</option>
-                  <option value="m01">Dryer M01</option>
-                  <option value="m02">Dryer M02</option>
-                  <option value="m09">Dryer M09</option>
+                  <option value="all">{dryersLoading ? "Loading..." : "All Machines"}</option>
+                  {dryers.map((dryer) => (
+                    <option key={dryer.dry_id} value={String(dryer.dry_id)}>
+                      {dryer.dry_name}
+                    </option>
+                  ))}
                 </select>
                 <ChevronDown size={13} className="absolute right-2.5 text-slate-400 pointer-events-none" />
               </div>
@@ -531,7 +557,7 @@ export function ReportsAnalytics({ batchId, appUserId }: ReportsAnalyticsProps =
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <StatPill label="AVG TEMPERATURE" avg={`${avgTemp}°C`} trend="up" color="#f97316" icon={<Thermometer size={16} />} />
           <StatPill label="AVG HUMIDITY" avg={`${avgHumid}%`} trend="down" color="#3b82f6" icon={<Droplets size={16} />} />
-          <StatPill label="AVG LIGHT" avg={`${avgLight} lux`} trend="stable" color="#eab308" icon={<Sun size={16} />} />
+          <StatPill label="AVG LIGHT" avg={`${avgLight} %`} trend="stable" color="#eab308" icon={<Sun size={16} />} />
         </div>
 
         {/* 30-Day Environmental Trends Chart */}
@@ -547,7 +573,11 @@ export function ReportsAnalytics({ batchId, appUserId }: ReportsAnalyticsProps =
                 </p>
               </div>
             </div>
-            <TrendChart dryId={getMachineIdFromString(zoneMachine)} machineLabel={getMachineLabel(zoneMachine)} onDataLoaded={setTrendChartData} />
+            <TrendChart
+              dryId={selectedDryer?.dry_id}
+              machineLabel={selectedDryer?.dry_name}
+              onDataLoaded={setTrendChartData}
+            />
           </div>
         ) : (
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">

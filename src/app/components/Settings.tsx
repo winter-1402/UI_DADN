@@ -113,17 +113,10 @@ export function Settings() {
   // ============================================================================
   // API DATA - Using Custom Hooks
   // ============================================================================
-  const { data: factories, loading: loadingFactories } = useApiData<Factory>(
-    () => structureAPI.factories.list(),
-    [],
-    (data) => {
-      if (data.length > 0 && !selectedFactory) setSelectedFactory(data[0].fac_id);
-    }
-  );
 
-  const { data: areas, loading: loadingAreas } = useConditionalApiData<Area>(
-    selectedFactory ? () => structureAPI.areas.list({ fac_id: selectedFactory }) : null,
-    [selectedFactory]
+  const { data: areas, loading: loadingAreas } = useApiData<Area>(
+    () => structureAPI.areas.list(),
+    []
   );
 
   const { data: dryers, loading: loadingDryers } = useConditionalApiData<Dryer>(
@@ -352,41 +345,6 @@ export function Settings() {
           </div>
 
           <div className="p-6 space-y-6">
-
-            {/* Factory Selection */}
-            <div>
-              <label className="text-slate-700 mb-2 block" style={{ fontSize: "0.8125rem", fontWeight: 600 }}>
-                Select Factory
-              </label>
-              {loadingFactories ? (
-                <div className="flex items-center gap-2 text-slate-500" style={{ fontSize: "0.8125rem" }}>
-                  <Loader2 size={14} className="animate-spin" />
-                  Loading factories...
-                </div>
-              ) : (
-                <select
-                  value={selectedFactory || ""}
-                  onChange={(e) => {
-                    setSelectedFactory(Number(e.target.value) || null);
-                    setSelectedArea(null);
-                    setSelectedDryer(null);
-                    setSelectedFruit("");
-                  }}
-                  className="w-full md:w-96 px-3 py-2 bg-white border border-slate-200 rounded-lg outline-none text-slate-700"
-                  style={{ fontSize: "0.8125rem", fontWeight: 600 }}
-                >
-                  <option value="">Select a factory</option>
-                  {factories.map((factory) => (
-                    <option key={factory.fac_id} value={factory.fac_id}>
-                      {factory.fac_name}
-                    </option>
-                  ))}
-                </select>
-              )}
-            </div>
-
-            {/* Area Selection */}
-            {selectedFactory && (
               <div>
                 <label className="text-slate-700 mb-2 block" style={{ fontSize: "0.8125rem", fontWeight: 600 }}>
                   Select Area/Zone
@@ -416,7 +374,6 @@ export function Settings() {
                   </select>
                 )}
               </div>
-            )}
 
             {/* Dryer Selection */}
             {selectedArea && (
@@ -574,174 +531,63 @@ export function Settings() {
 
                           <ArrowRight size={14} className="text-slate-300 shrink-0" />
 
-                          {/* Action Input */}
-                          <input
-                            type="text"
-                            value={sensor.action}
-                            onChange={(e) => handleThresholdChange(sensor.sensor_id, "action", e.target.value)}
-                            placeholder="Action..."
-                            className="flex-1 px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg outline-none text-slate-700"
-                            style={{ fontSize: "0.78rem" }}
-                          />
+                                                              {/* Chọn hành động khi vượt ngưỡng */}
+                                    <div className="mb-2">
+                                      <label className="text-xs text-slate-600 block mb-1">Hành động khi vượt ngưỡng</label>
+                                      <select className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-purple-400">
+                                        <option value="">-- Chọn hành động --</option>
+                                        <option value="stop">Dừng máy</option>
+                                        <option value="alarm">Báo động</option>
+                                        <option value="notify">Gửi thông báo</option>
+                                        <option value="adjust">Điều chỉnh tự động</option>
+                                      </select>
+                                    </div>
                         </div>
                       ))}
                     </div>
                   )}
 
-                  {/* Light Sensor Configuration */}
-                  {dryerSensors.some((sensor: any) => sensor.sensor_type === "light") && (
-                    <div className="mt-6 pt-6 border-t border-slate-200">
-                      <div className="flex items-center gap-2 mb-4">
-                        <Sun size={15} className="text-yellow-500" />
-                        <label className="text-slate-700" style={{ fontSize: "0.8125rem", fontWeight: 600 }}>
-                          Light Sensor Configuration
-                        </label>
+                  {/* Policy Application Info */}
+                  {selectedDryer && selectedFruit && (
+                    <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+                      <div className="flex items-start gap-3">
+                        <div className="flex-shrink-0 w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center">
+                          <SettingsIcon size={16} className="text-white" />
+                        </div>
+                        <div>
+                          <h3 className="text-blue-900" style={{ fontSize: "0.8125rem", fontWeight: 700 }}>
+                            Policy Application
+                          </h3>
+                          <p className="text-blue-700 mt-1" style={{ fontSize: "0.75rem" }}>
+                            This policy will be applied to dryer <strong>{dryers.find((d: any) => d.dry_id === selectedDryer)?.dry_name || "..."}</strong>
+                            {selectedArea ? (
+                              <>
+                                {" "}in area <strong>{areas.find((a: any) => a.area_id === selectedArea)?.area_name}</strong>
+                              </>
+                            ) : null}
+                            {" "}for fruit <strong>{fruits.find((f: any) => String(f.fruit_id) === selectedFruit)?.fruit_name || "..."}</strong>
+                            {policy.controlMode === "automations_recipe" ? (
+                              <>
+                                {" "}using recipe <strong>{(recipes as any[])?.find((r: any) => String(r.recipe_id) === String(selectedRecipe || policy.selectedRecipeId))?.recipe_name}</strong>
+                              </>
+                            ) : null}
+                            {policy.automationRules.length > 0 ? (
+                              <>
+                                {" "}with automation rules <strong>{policy.automationRules.map((id) => automationRuleOptions.find((r) => r.id === id)?.name || id).join(", ")}</strong>
+                              </>
+                            ) : null}
+                            .
+                            The control mode and automation rules can also be linked to specific drying batches for fine-grained control.
+                          </p>
+                        </div>
                       </div>
-
-                      {(() => {
-                        const lightSensor = dryerSensors.find((s: any) => s.sensor_type === "light");
-                        if (!lightSensor) return null;
-
-                        return (
-                          <div className="space-y-4">
-                            {/* Current Light Reading */}
-                            <div className="bg-gradient-to-br from-yellow-50 to-amber-50 border border-yellow-200 rounded-lg p-4">
-                              <div className="flex items-center justify-between">
-                                <div>
-                                  <p className="text-slate-600 text-sm font-semibold">Current Light Level</p>
-                                  <p className="text-slate-500 text-xs mt-1">Last updated: {lightSensor.updated_at ? new Date(lightSensor.updated_at).toLocaleTimeString() : "N/A"}</p>
-                                </div>
-                                <div className="text-right">
-                                  <p className="text-3xl font-bold text-yellow-600">{lightSensor.last_value ?? "N/A"}</p>
-                                  <p className="text-xs text-slate-500">lux</p>
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Light Threshold Settings */}
-                            <div className="bg-white border border-slate-200 rounded-lg p-4 space-y-4">
-                              <div>
-                                <label className="text-slate-700 text-sm font-semibold block mb-2">
-                                  Threshold Value (lux)
-                                </label>
-                                <input
-                                  type="number"
-                                  defaultValue={lightSensor.threshold ?? 0}
-                                  placeholder="e.g., 500"
-                                  className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-1 focus:ring-yellow-500"
-                                  style={{ fontSize: "0.8125rem" }}
-                                />
-                                <p className="text-slate-500 text-xs mt-2">Set the light intensity threshold for automated control</p>
-                              </div>
-
-                              <div>
-                                <label className="text-slate-700 text-sm font-semibold block mb-2">
-                                  Trigger Condition
-                                </label>
-                                <select
-                                  defaultValue={lightSensor.condition || "above"}
-                                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg outline-none focus:ring-1 focus:ring-yellow-500"
-                                  style={{ fontSize: "0.8125rem" }}
-                                >
-                                  <option value="above">When light is ABOVE threshold</option>
-                                  <option value="below">When light is BELOW threshold</option>
-                                </select>
-                              </div>
-
-                              <div>
-                                <label className="text-slate-700 text-sm font-semibold block mb-2">
-                                  Control Action
-                                </label>
-                                <select
-                                  defaultValue=""
-                                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg outline-none focus:ring-1 focus:ring-yellow-500"
-                                  style={{ fontSize: "0.8125rem" }}
-                                >
-                                  <option value="">Select action...</option>
-                                  <option value="turn_on_lamp">Turn on lamp</option>
-                                  <option value="turn_off_lamp">Turn off lamp</option>
-                                  <option value="dim_lamp">Dim lamp</option>
-                                  <option value="increase_ventilation">Increase ventilation</option>
-                                  <option value="alert">Send alert</option>
-                                </select>
-                              </div>
-
-                              <div className="flex items-center gap-2 p-3 bg-yellow-50 border border-yellow-100 rounded-lg">
-                                <input
-                                  type="checkbox"
-                                  id="light-enabled"
-                                  defaultChecked={lightSensor.threshold_enabled !== false}
-                                  className="rounded accent-yellow-500"
-                                />
-                                <label htmlFor="light-enabled" className="text-sm text-slate-700 cursor-pointer flex-1">
-                                  Enable light sensor control
-                                </label>
-                              </div>
-                            </div>
-
-                            {/* Light Sensor Range Info */}
-                            <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
-                              <p className="text-slate-600 font-semibold text-sm mb-2">Common Light Levels (Reference)</p>
-                              <div className="grid grid-cols-2 gap-2 text-xs text-slate-600">
-                                <div>Dark room: &lt;50 lux</div>
-                                <div>Office: 300-500 lux</div>
-                                <div>Bright room: 500-1000 lux</div>
-                                <div>Sunlight: &gt;10,000 lux</div>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })()}
                     </div>
                   )}
-
                 </div>
               </>
             )}
           </div>
         </div>
-
-        {/* Policy Application Info */}
-        {selectedDryer && selectedFruit && (
-          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-            <div className="flex items-start gap-3">
-              <div className="flex-shrink-0 w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center">
-                <SettingsIcon size={16} className="text-white" />
-              </div>
-              <div>
-                <h3 className="text-blue-900" style={{ fontSize: "0.8125rem", fontWeight: 700 }}>
-                  Policy Application
-                </h3>
-                <p className="text-blue-700 mt-1" style={{ fontSize: "0.75rem" }}>
-                  This policy will be applied to dryer <strong>{dryers.find((d) => d.dry_id === selectedDryer)?.dry_name || "..."}</strong>
-                  {selectedArea ? (
-                    <>
-                      {" "}in area <strong>{areas.find((a) => a.area_id === selectedArea)?.area_name}</strong>
-                    </>
-                  ) : null}
-                  {selectedFactory ? (
-                    <>
-                      {" "}at factory <strong>{factories.find((f) => f.fac_id === selectedFactory)?.fac_name}</strong>
-                    </>
-                  ) : null}
-                  {" "}for fruit <strong>{fruits.find((f) => String(f.fruit_id) === selectedFruit)?.fruit_name || "..."}</strong>
-                  {policy.controlMode === "automations_recipe" ? (
-                    <>
-                      {" "}using recipe <strong>{recipes?.find((r) => String(r.recipe_id) === String(selectedRecipe || policy.selectedRecipeId))?.recipe_name}</strong>
-                    </>
-                  ) : null}
-                  {policy.automationRules.length > 0 ? (
-                    <>
-                      {" "}with automation rules <strong>{policy.automationRules.map((id) => automationRuleOptions.find((r) => r.id === id)?.name || id).join(", ")}</strong>
-                    </>
-                  ) : null}
-                  .
-                  The control mode and automation rules can also be linked to specific drying batches for fine-grained control.
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );
