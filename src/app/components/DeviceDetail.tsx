@@ -843,6 +843,13 @@ if (Number.isNaN(startMs)) throw new Error("Invalid date");
                     Dừng
                   </button>
                   <button
+                    onClick={() => abortBatch(activeBatch.batch_id)}
+                    disabled={batchActionId === activeBatch.batch_id}
+                    className="px-3 py-1.5 rounded text-xs font-semibold bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed ml-2"
+                  >
+                    Huỷ
+                  </button>
+                  <button
                     onClick={() => resumeBatch(activeBatch.batch_id)}
                     disabled={batchActionId === activeBatch.batch_id || !(activeBatch.status === "paused" || activeBatch.status === "pending")}
                     className="px-3 py-1.5 rounded text-xs font-semibold bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -1042,7 +1049,7 @@ if (Number.isNaN(startMs)) throw new Error("Invalid date");
                                         )}
                                         <div>
                                           <p className="text-slate-800 font-semibold text-sm capitalize">
-                                            Ngưỡng {sensor.sensor_type === "temperature" ? "nhiệt độ" : sensor.sensor_type === "humidity" ? "độ ẩm" : "light"} hiện tại là: <span className="text-purple-700">{sensor.threshold ?? "-"}{sensor.sensor_type === "temperature" ? "°C" : "%" }</span>
+                                            Ngưỡng {sensor.sensor_type === "temperature" ? "nhiệt độ" : sensor.sensor_type === "humidity" ? "độ ẩm" : "light"} hiện tại là: <span className="text-purple-700">{"Lớn hơn"} {sensor.threshold ?? "-"} {sensor.sensor_type === "temperature" ? "°C" : "%" }</span>
                                           </p>
                                         </div>
                                       </div>
