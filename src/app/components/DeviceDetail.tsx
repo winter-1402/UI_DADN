@@ -339,20 +339,24 @@ export function DeviceDetail() {
   ) => {
     setBatchActionId(batchId);
     try {
-      if (action === "resume" || action === "start") {
+      if (action === "start") {
         await batchAPI.start(batchId);
         toast.success(successMsg);
       } else if (action === "pause") {
-        await batchAPI.pause(batchId, "paused");
+        await batchAPI.pause(batchId);
         toast.success(successMsg);
       } else if (action === "abort") {
-        await batchAPI.pause(batchId, "cancelled");
+        await batchAPI.abort(batchId);
         toast.success(successMsg);
         await fetchBatches();
       } else if (action === "completed") {
-        await batchAPI.pause(batchId, "completed");
+        await batchAPI.stop(batchId, "completed");
         toast.success(successMsg);
         await fetchBatches();
+      }
+      else if (action === "resume" ) {
+        await batchAPI.resume(batchId);
+        toast.success(successMsg);
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Thao tác mẻ sấy thất bại");
@@ -364,17 +368,21 @@ export function DeviceDetail() {
   // Compute which phase is currently running based on batch start time and phase durations
   const runningPhaseInfo = (() => {
     if (!activeBatch) return { index: 0, phase: null, progressPercent: 0 };
+
+    // safe phases array
+    const phases = Array.isArray(recipeDetail?.phases) ? recipeDetail!.phases : [];
+
     // Try various possible start time fields on batch
     const rawStart = (activeBatch as any).start_time || (activeBatch as any).started_at || activeBatch.created_at || null;
-   
-    if (!rawStart) return { index: 0, phase: recipeDetail?.phases[0] ?? null, progressPercent: 0 };
-const startMs = Date.parse(rawStart); 
-if (Number.isNaN(startMs)) throw new Error("Invalid date");
- let diffMs = Date.now() - startMs; 
+    if (!rawStart) return { index: 0, phase: phases[0] ?? null, progressPercent: 0 };
+
+    const startMs = Date.parse(rawStart);
+    if (Number.isNaN(startMs)) return { index: 0, phase: phases[0] ?? null, progressPercent: 0 };
+    let diffMs = Date.now() - startMs;
 
     // Sum durations to find current phase
-    for (let i = 0; i < recipeDetail?.phases.length; i++) {
-      const ph = recipeDetail?.phases[i];
+    for (let i = 0; i < phases.length; i++) {
+      const ph = phases[i];
       const durSec =
         ph?.duration_seconds ??
         (ph?.duration != null ? Math.round(Number(ph.duration) * 3600) :
@@ -391,10 +399,14 @@ if (Number.isNaN(startMs)) throw new Error("Invalid date");
       }
       diffMs -= durSec * 1000;
     }
+
     if (diffMs < 0) {
-      return runBatchAction(activeBatch.batch_id, "completed", "Đã hoàn thành mẻ sấy");
+      // mark completed asynchronously, but return final phase info synchronously
+      void runBatchAction(activeBatch.batch_id, "completed", "Đã hoàn thành mẻ sấy");
+      return { index: phases.length > 0 ? phases.length - 1 : 0, phase: phases[phases.length - 1] ?? null, progressPercent: 100 };
     }
-    return { index: recipeDetail?.phases.length - 1, phase: recipeDetail?.phases[recipeDetail.phases.length - 1], progressPercent: 100 };
+
+    return { index: phases.length > 0 ? phases.length - 1 : 0, phase: phases[phases.length - 1] ?? null, progressPercent: 100 };
   })();
 
   const startBatch = (batchId: number) => runBatchAction(batchId, "start", "Đã bắt đầu mẻ sấy");
@@ -850,7 +862,13 @@ if (Number.isNaN(startMs)) throw new Error("Invalid date");
                     Huỷ
                   </button>
                   <button
-                    onClick={() => resumeBatch(activeBatch.batch_id)}
+                    onClick={() => {
+                      if (activeBatch.status === "paused") {
+                        resumeBatch(activeBatch.batch_id);
+                      }
+                      else {startBatch(activeBatch.batch_id);
+                      }
+                    }}
                     disabled={batchActionId === activeBatch.batch_id || !(activeBatch.status === "paused" || activeBatch.status === "pending")}
                     className="px-3 py-1.5 rounded text-xs font-semibold bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
@@ -925,7 +943,7 @@ if (Number.isNaN(startMs)) throw new Error("Invalid date");
                             {runningPhaseInfo.phase?.phase_name ?? runningPhaseInfo.phase?.name ?? `Phase ${runningPhaseInfo.index + 1}`}
                           </h4>
                           <p className="text-emerald-600 text-xs">
-                            Phase {runningPhaseInfo.index + 1} / {recipeDetail?.phases.length}
+                            Phase {runningPhaseInfo.index + 1} / {recipePhases.length}
                           </p>
                         </div>
                       </div>

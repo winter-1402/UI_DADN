@@ -31,7 +31,7 @@ type MachineStatus = "running" | "offline" | "alert";
 const statusConfig: Record<MachineStatus, { label: string; bg: string; text: string; dot: string; icon: React.ReactNode }> = {
   running: { label: "Running", bg: "bg-emerald-50", text: "text-emerald-700", dot: "bg-emerald-500", icon: <CheckCircle size={11} /> },
   offline: { label: "Offline", bg: "bg-slate-100", text: "text-slate-500", dot: "bg-slate-400", icon: <WifiOff size={11} /> },
-  idle: { label: "Idle", bg: "bg-red-50", text: "text-red-600", dot: "bg-red-500", icon: <AlertTriangle size={11} /> },
+  alert: { label: "Alert", bg: "bg-red-50", text: "text-red-600", dot: "bg-red-500", icon: <AlertTriangle size={11} /> },
 };
 
 function ToggleSwitch({ checked, onChange, disabled }: { checked: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
@@ -45,7 +45,7 @@ function ToggleSwitch({ checked, onChange, disabled }: { checked: boolean; onCha
   );
 }
 
-function MachineCard({ machine, onToggle, onViewDetails, onDelete }: { machine: Machine; onToggle: (id: string) => void; onViewDetails: (id: string) => void; onDelete: (id: string) => void }) {
+function MachineCard({ machine, onToggle, onViewDetails, onDelete, onChangeName }: { machine: Machine; onToggle: (id: string) => void; onViewDetails: (id: string) => void; onDelete: (id: string) => void; onChangeName: (id: string, currentName: string) => void }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
   const [freshTemp, setFreshTemp] = useState<number | null>(null);
@@ -56,7 +56,7 @@ function MachineCard({ machine, onToggle, onViewDetails, onDelete }: { machine: 
   const [lightThreshold, setLightThreshold] = useState<number | null>(null);
   const [localPowerOn, setLocalPowerOn] = useState(machine.isOn ?? true);
   const [powerLoading, setPowerLoading] = useState(false);
-  const s = statusConfig[machine.status];
+  const s = statusConfig[(machine.status as MachineStatus)] ?? statusConfig.offline;
 
   // Fetch fresh dryer data including temperature and humidity
   useEffect(() => {
@@ -129,8 +129,8 @@ function MachineCard({ machine, onToggle, onViewDetails, onDelete }: { machine: 
   };
 
   return (
-    <div className={`bg-white rounded-xl border shadow-sm hover:shadow-md transition-all duration-200 overflow-visible relative ${machine.status === "Idle" ? "border-red-200" : "border-slate-200"}`}>
-      {machine.status === "Idle" && <div className="h-0.5 w-full bg-gradient-to-r from-red-400 to-orange-400 rounded-t-xl" />}
+    <div className={`bg-white rounded-xl border shadow-sm hover:shadow-md transition-all duration-200 overflow-visible relative ${machine.status === "alert" ? "border-red-200" : "border-slate-200"}`}>
+      {machine.status === "alert" && <div className="h-0.5 w-full bg-gradient-to-r from-red-400 to-orange-400 rounded-t-xl" />}
 
       <div className="px-4 pt-4 pb-3 flex items-start justify-between">
         <div className="flex items-center gap-2.5">
@@ -149,8 +149,8 @@ function MachineCard({ machine, onToggle, onViewDetails, onDelete }: { machine: 
           </button>
           {menuOpen && (
             <div className="absolute right-0 top-8 z-20 bg-white border border-slate-200 rounded-lg shadow-lg py-1 w-36">
-              <button onClick={() => setMenuOpen(false)} className="w-full flex items-center gap-2.5 px-3 py-2 text-slate-600 hover:bg-slate-50 transition-all" style={{ fontSize: "0.8rem" }}>
-                <Edit2 size={13} className="text-slate-400" /> Edit Machine
+              <button onClick={() => {setMenuOpen(false); onChangeName(machine.id, machine.name);}} className="w-full flex items-center gap-2.5 px-3 py-2 text-slate-600 hover:bg-slate-50 transition-all" style={{ fontSize: "0.8rem" }}>
+                <Edit2 size={13} className="text-slate-400" /> Change Name
               </button>
               <button onClick={() => { setMenuOpen(false); onDelete(machine.id); }} className="w-full flex items-center gap-2.5 px-3 py-2 text-red-500 hover:bg-red-50 transition-all" style={{ fontSize: "0.8rem" }}>
                 <Trash2 size={13} /> Delete
@@ -161,8 +161,8 @@ function MachineCard({ machine, onToggle, onViewDetails, onDelete }: { machine: 
       </div>
 
       <div className="px-4 pb-3">
-        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full ${s.bg} ${s.text}`} style={{ fontSize: "0.7rem", fontWeight: 600 }}>
-          <span className={`w-1.5 h-1.5 rounded-full ${s.dot} ${machine.status === "idle" ? "animate-pulse" : ""}`} />
+          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full ${s.bg} ${s.text}`} style={{ fontSize: "0.7rem", fontWeight: 600 }}>
+          <span className={`w-1.5 h-1.5 rounded-full ${s.dot} ${machine.status === "alert" ? "animate-pulse" : ""}`} />
           {s.icon}
           {s.label}
         </span>
@@ -247,7 +247,7 @@ function MachineCard({ machine, onToggle, onViewDetails, onDelete }: { machine: 
   );
 }
 
-function ZoneSection({ title, subtitle, machines, onToggle, onViewDetails, onDelete, show }: { title: string; subtitle: string; machines: Machine[]; onToggle: (id: string) => void; onViewDetails: (id: string) => void; onDelete: (id: string) => void; show: boolean }) {
+function ZoneSection({ title, subtitle, machines, onToggle, onViewDetails, onDelete, onChangeName, show }: { title: string; subtitle: string; machines: Machine[]; onToggle: (id: string) => void; onViewDetails: (id: string) => void; onDelete: (id: string) => void; onChangeName: (id: string, currentName: string) => void; show: boolean }) {
   const runningCount = machines.filter((m) => m.status === "running").length;
   const alertCount = machines.filter((m) => m.status === "offline").length;
   if (!show) return null;
@@ -265,7 +265,7 @@ function ZoneSection({ title, subtitle, machines, onToggle, onViewDetails, onDel
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 items-start">
-        {machines.map((m) => <MachineCard key={m.id} machine={m} onToggle={onToggle} onViewDetails={onViewDetails} onDelete={onDelete} />)}
+        {machines.map((m) => <MachineCard key={m.id} machine={m} onToggle={onToggle} onViewDetails={onViewDetails} onDelete={onDelete} onChangeName={onChangeName} />)}
       </div>
     </div>
   );
@@ -307,7 +307,17 @@ export function DevicesManagement() {
 
 
   const [showNewPatch, setShowNewPatch] = useState(false);
-  const [patchForm, setPatchForm] = useState({ dry_id: "", fruit_id: "", recipe_id: "", operation_mode: "scheduled", threshold_enabled: false, is_customize: false });
+  const [patchForm, setPatchForm] = useState({
+    dry_id: "",
+    fruit_id: "",
+    recipe_id: "",
+    operation_mode: "scheduled",
+    schedule_type: "fixed",
+    fixed_time: "08:00",
+    recurring_interval: 8,
+    threshold_enabled: false,
+    is_customize: false,
+  });
   const [patchLoading, setPatchLoading] = useState(false);
   const [patchRecipes, setPatchRecipes] = useState<any[]>([]);
   const [loadingRecipes, setLoadingRecipes] = useState(false);
@@ -349,10 +359,7 @@ export function DevicesManagement() {
     }
     try {
       setCreatingMachine(true);
-      await apiRequest('POST', FACTORY_ENDPOINTS.dryers.create, {
-        dry_name: newMachineName.trim(),
-        area_id: Number(newMachineArea),
-      });
+      await structureAPI.dryers.create({ dry_name: newMachineName.trim(), area_id: Number(newMachineArea) });
       toast.success("Đã thêm máy sấy");
       setShowAddMachine(false);
       setNewMachineName("");
@@ -373,11 +380,30 @@ export function DevicesManagement() {
       return;
     }
     try {
-      await apiRequest('DELETE', FACTORY_ENDPOINTS.dryers.delete(dryerId));
+      await structureAPI.dryers.delete(dryerId);
       toast.success("Đã xóa máy sấy");
       refetchDryers();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Xóa máy sấy thất bại");
+    }
+  };
+
+  const handleChangeMachineName = async (machineId: string, currentName: string) => {
+    const nextName = prompt("Nhập tên mới cho máy:", currentName)?.trim();
+    if (!nextName || nextName === currentName.trim()) return;
+
+    const dryerId = Number(machineId.replace(/^[^0-9]*/, "")) || 0;
+    if (!dryerId) {
+      toast.error("ID máy không hợp lệ");
+      return;
+    }
+
+    try {
+      await structureAPI.dryers.update(dryerId, { dry_name: nextName });
+      toast.success("Đã đổi tên máy");
+      refetchDryers();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Đổi tên máy thất bại");
     }
   };
 
@@ -404,6 +430,15 @@ export function DevicesManagement() {
         fruit_id: Number(patchForm.fruit_id),
         recipe_id: Number(patchForm.recipe_id),
         operation_mode: patchForm.operation_mode,
+        schedule_type: patchForm.operation_mode === "scheduled" ? patchForm.schedule_type : null,
+        fixed_time:
+          patchForm.operation_mode === "scheduled" && patchForm.schedule_type === "fixed"
+            ? patchForm.fixed_time
+            : null,
+        recurring_interval:
+          patchForm.operation_mode === "scheduled" && patchForm.schedule_type === "recurring"
+            ? patchForm.recurring_interval
+            : null,
         threshold_enabled: patchForm.threshold_enabled,
         is_customize: patchForm.is_customize,
       });
@@ -411,7 +446,17 @@ export function DevicesManagement() {
       if (result.status === 'success') {
         toast.success(`Tạo mẻ sấy thành công (Batch ID: ${result.data.batch_id})`);
         setShowNewPatch(false);
-        setPatchForm({ dry_id: "", fruit_id: "", recipe_id: "", operation_mode: "scheduled", threshold_enabled: false, is_customize: false });
+        setPatchForm({
+          dry_id: "",
+          fruit_id: "",
+          recipe_id: "",
+          operation_mode: "scheduled",
+          schedule_type: "fixed",
+          fixed_time: "08:00",
+          recurring_interval: 8,
+          threshold_enabled: false,
+          is_customize: false,
+        });
         refetchDryers();
       } else {
         toast.error("Lỗi tạo mẻ sấy: " + (result.message || "Unknown error"));
@@ -519,6 +564,7 @@ export function DevicesManagement() {
             onToggle={handleToggle}
             onViewDetails={handleViewDetails}
             onDelete={handleDeleteMachine}
+            onChangeName={handleChangeMachineName}
             show={true}
           />
         )}
@@ -594,11 +640,62 @@ export function DevicesManagement() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium mb-1">Operation Mode</label>
-                  <select value={patchForm.operation_mode} onChange={(e) => setPatchForm({ ...patchForm, operation_mode: e.target.value })} className="w-full px-3 py-2 border rounded">
+                  <select
+                    value={patchForm.operation_mode}
+                    onChange={(e) =>
+                      setPatchForm({
+                        ...patchForm,
+                        operation_mode: e.target.value,
+                        schedule_type: e.target.value === "scheduled" ? patchForm.schedule_type : "fixed",
+                      })
+                    }
+                    className="w-full px-3 py-2 border rounded"
+                  >
                     <option value="scheduled">Scheduled</option>
                     <option value="manual">Manual</option>
                   </select>
                 </div>
+                {patchForm.operation_mode === "scheduled" && (
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Schedule Type</label>
+                      <select
+                        value={patchForm.schedule_type}
+                        onChange={(e) => setPatchForm({ ...patchForm, schedule_type: e.target.value })}
+                        className="w-full px-3 py-2 border rounded"
+                      >
+                        <option value="fixed">Fixed time</option>
+                        <option value="recurring">Recurring</option>
+                      </select>
+                    </div>
+                    {patchForm.schedule_type === "fixed" ? (
+                      <div>
+                        <label className="block text-sm font-medium mb-1">Fixed Time</label>
+                        <input
+                          type="time"
+                          value={patchForm.fixed_time}
+                          onChange={(e) => setPatchForm({ ...patchForm, fixed_time: e.target.value })}
+                          className="w-full px-3 py-2 border rounded"
+                        />
+                      </div>
+                    ) : (
+                      <div>
+                        <label className="block text-sm font-medium mb-1">Recurring Interval</label>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            min={1}
+                            max={24}
+                            value={patchForm.recurring_interval}
+                            onChange={(e) => setPatchForm({ ...patchForm, recurring_interval: Number(e.target.value) })}
+                            className="w-full px-3 py-2 border rounded"
+                          />
+                          <span className="text-sm text-slate-500 shrink-0">hours</span>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
                 <div className="flex items-center gap-2">
                   <input type="checkbox" checked={patchForm.threshold_enabled} onChange={(e) => setPatchForm({ ...patchForm, threshold_enabled: e.target.checked })} />
                   <label className="text-sm">Enable Threshold</label>

@@ -32,15 +32,6 @@ export const USER_ENDPOINTS = {
 // FACTORY STRUCTURE APIs
 // ============================================================================
 export const FACTORY_ENDPOINTS = {
-  // Factories
-  factories: {
-    list: `${API_BASE_URL}/factories`,           // GET: List all factories
-    create: `${API_BASE_URL}/factories`,         // POST: Create factory (admin only)
-    get: (factoryId: number) => `${API_BASE_URL}/factories/${factoryId}`,
-    update: (factoryId: number) => `${API_BASE_URL}/factories/${factoryId}`,  // PATCH
-    delete: (factoryId: number) => `${API_BASE_URL}/factories/${factoryId}`,
-  },
-  
   // Areas
   areas: {
     list: `${API_BASE_URL}/areas`,               // GET: List areas (with optional fac_id filter)
@@ -67,15 +58,6 @@ export const FACTORY_ENDPOINTS = {
     update: `${API_BASE_URL}/sensor-data`,  // PATCH
     delete: (sensorId: number) => `${API_BASE_URL}/sensors/${sensorId}`,
     data: (sensorId: number) => `${API_BASE_URL}/sensors/${sensorId}/data`,  // GET: Get sensor data
-  },
-  
-  // Light Sensors (specialized endpoint for light sensor data)
-  lightSensors: {
-    list: `${API_BASE_URL}/sensors?sensor_type=light`,  // GET: List all light sensors
-    get: (sensorId: number) => `${API_BASE_URL}/sensors/${sensorId}`,  // GET: Get specific light sensor
-    getData: (sensorId: number, filters?: { from?: string; to?: string; limit?: number }) => 
-      `${API_BASE_URL}/sensors/${sensorId}/data${createQueryParams(filters || {})}`,  // GET: Get light sensor data with time range
-    getByDryer: (dryerId: number) => `${API_BASE_URL}/dryers/${dryerId}/sensors?sensor_type=light`,  // GET: Get light sensors for a dryer
   },
   
   // Controls
@@ -136,7 +118,12 @@ export const BATCH_ENDPOINTS = {
   get: (batchId: number) => `${API_BASE_URL}/batches/${batchId}`,
   update: (batchId: number) => `${API_BASE_URL}/batches/${batchId}`,  // PATCH: Update batch
   start: (batchId: number) => `${API_BASE_URL}/batches/${batchId}/start`,  // POST: Start batch
-  pause: (batchId: number) => `${API_BASE_URL}/batches/${batchId}/stop`,  // POST: Pause batch
+  pause: (batchId: number) => `${API_BASE_URL}/batches/${batchId}/pause`,  // POST: Pause batch
+  resume: (batchId: number) => `${API_BASE_URL}/batches/${batchId}/resume`,  // POST: Resume batch
+  abort: (batchId: number) => `${API_BASE_URL}/batches/${batchId}/abort`,  // POST: Abort batch
+  threshold: (batchId: number) => `${API_BASE_URL}/batches/${batchId}/toggle-threshold`,  // GET: Get threshold status, POST: Update threshold
+  stop: (batchId: number, status: string) => `${API_BASE_URL}/batches/${batchId}/stop?final_status=${status}`,  // POST: Stop batch with final status
+  
   
   // Sensor data for batches
   sensorData: (batchId: number) => `${API_BASE_URL}/batches/${batchId}/sensor-data`,  // GET: Get sensor data for batch
@@ -297,8 +284,20 @@ export const batchAPI = {
   start: (batchId: number) =>
     apiRequest('POST', BATCH_ENDPOINTS.start(batchId)),
   
-  pause: (batchId: number, final_status: string) =>
-    apiRequest('POST', BATCH_ENDPOINTS.pause(batchId), { final_status : final_status }),
+  pause: (batchId: number) =>
+    apiRequest('POST', BATCH_ENDPOINTS.pause(batchId)),
+  
+  resume: (batchId: number) =>
+    apiRequest('POST', BATCH_ENDPOINTS.resume(batchId)),
+  
+  abort: (batchId: number) =>
+    apiRequest('POST', BATCH_ENDPOINTS.abort(batchId)),
+
+  stop: (batchId: number, status: string) =>
+    apiRequest('POST', BATCH_ENDPOINTS.stop(batchId, status)),
+  
+  threshold: (batchId: number, enabled: boolean) =>
+    apiRequest('POST', BATCH_ENDPOINTS.threshold(batchId), { "threshold_enabled": enabled }),
   
 };
 
@@ -329,14 +328,17 @@ export const catalogAPI = {
 
 // Factory Structure
 export const structureAPI = {
-  factories: {
-    list: () =>
-      apiRequest('GET', FACTORY_ENDPOINTS.factories.list),
-  },
-  
   areas: {
     list: (filters?: { fac_id?: number }) =>
       apiRequest('GET', `${FACTORY_ENDPOINTS.areas.list}${createQueryParams(filters || {})}`),
+    get: (areaId: number) =>
+      apiRequest('GET', FACTORY_ENDPOINTS.areas.get(areaId)),
+    create: (data: Record<string, any>) =>
+      apiRequest('POST', FACTORY_ENDPOINTS.areas.create, data),
+    update: (areaId: number, data: Record<string, any>) =>
+      apiRequest('PATCH', FACTORY_ENDPOINTS.areas.update(areaId), data),
+    delete: (areaId: number) =>
+      apiRequest('DELETE', FACTORY_ENDPOINTS.areas.delete(areaId)),
   },
   
   dryers: {
@@ -345,9 +347,15 @@ export const structureAPI = {
     
     get: (dryerId: number) =>
       apiRequest('GET', FACTORY_ENDPOINTS.dryers.get(dryerId)),
+
+    create: (data: Record<string, any>) =>
+      apiRequest('POST', FACTORY_ENDPOINTS.dryers.create, data),
     
     update: (dryerId: number, data: Record<string, any>) =>
       apiRequest('PATCH', FACTORY_ENDPOINTS.dryers.update(dryerId), data),
+
+    delete: (dryerId: number) =>
+      apiRequest('DELETE', FACTORY_ENDPOINTS.dryers.delete(dryerId)),
   },
   
   sensors: {
@@ -363,21 +371,7 @@ export const structureAPI = {
       apiRequest('POST', FACTORY_ENDPOINTS.sensors.update, { sensor_id: sensorId, value }),
 
   },
-  
-  lightSensors: {
-    list: () =>
-      apiRequest('GET', FACTORY_ENDPOINTS.lightSensors.list),
-    
-    get: (sensorId: number) =>
-      apiRequest('GET', FACTORY_ENDPOINTS.lightSensors.get(sensorId)),
-    
-    getData: (sensorId: number, filters?: { from?: string; to?: string; limit?: number }) =>
-      apiRequest('GET', FACTORY_ENDPOINTS.lightSensors.getData(sensorId, filters)),
-    
-    getByDryer: (dryerId: number) =>
-      apiRequest('GET', FACTORY_ENDPOINTS.lightSensors.getByDryer(dryerId)),
-  },
-  
+
   controls: {
     list: (filters?: { dry_id?: number; control_type?: string }) =>
       apiRequest('GET', `${FACTORY_ENDPOINTS.controls.list}${createQueryParams(filters || {})}`),
