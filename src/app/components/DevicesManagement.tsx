@@ -407,13 +407,29 @@ export function DevicesManagement() {
     }
   };
 
-  const handleToggle = (_id: string) => {
-    // Master power toggle now works locally without API
-    toast.success("Trạng thái máy sấy được cập nhật cục bộ (không cần API)");
-  };
-
   const handleViewDetails = (id: string) => {
     navigate(`/devices/${id}`);
+  };
+
+  const buildScheduledStartTime = (fixedTime: string) => {
+    const [hourStr, minuteStr] = fixedTime.split(":");
+    const hour = Number(hourStr);
+    const minute = Number(minuteStr);
+
+    if (!Number.isFinite(hour) || !Number.isFinite(minute)) {
+      return null;
+    }
+
+    const now = new Date();
+    const scheduled = new Date(now);
+    scheduled.setHours(hour, minute, 0, 0);
+
+    // If selected time already passed today, schedule for next day.
+    if (scheduled <= now) {
+      scheduled.setDate(scheduled.getDate() + 1);
+    }
+
+    return scheduled.toISOString();
   };
 
 
@@ -423,6 +439,25 @@ export function DevicesManagement() {
       return;
     }
 
+    const scheduledStartTime =
+      patchForm.operation_mode === "scheduled" && patchForm.schedule_type === "fixed"
+        ? buildScheduledStartTime(patchForm.fixed_time)
+        : null;
+
+    if (
+      patchForm.operation_mode === "scheduled" &&
+      patchForm.schedule_type === "fixed" &&
+      !scheduledStartTime
+    ) {
+      toast.error("Thời gian hẹn lịch không hợp lệ");
+      return;
+    }
+
+    const recurringDelaySeconds =
+      patchForm.operation_mode === "scheduled" && patchForm.schedule_type === "recurring"
+        ? Number(patchForm.recurring_interval) * 60
+        : null;
+
     try {
       setPatchLoading(true);
       const result = await apiRequest('POST', BATCH_ENDPOINTS.create, {
@@ -431,14 +466,8 @@ export function DevicesManagement() {
         recipe_id: Number(patchForm.recipe_id),
         operation_mode: patchForm.operation_mode,
         schedule_type: patchForm.operation_mode === "scheduled" ? patchForm.schedule_type : null,
-        fixed_time:
-          patchForm.operation_mode === "scheduled" && patchForm.schedule_type === "fixed"
-            ? patchForm.fixed_time
-            : null,
-        recurring_interval:
-          patchForm.operation_mode === "scheduled" && patchForm.schedule_type === "recurring"
-            ? patchForm.recurring_interval
-            : null,
+        scheduled_start_time: scheduledStartTime,
+        scheduled_delay_seconds: recurringDelaySeconds,
         threshold_enabled: patchForm.threshold_enabled,
         is_customize: patchForm.is_customize,
       });
@@ -517,7 +546,7 @@ export function DevicesManagement() {
           <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 flex items-center justify-between">
             <div>
               <p style={{ fontWeight: 700, fontSize: "0.875rem" }}>Không tải được dữ liệu thiết bị</p>
-              <p style={{ fontSize: "0.78rem" }}>{dryersError || factoriesError}</p>
+              <p style={{ fontSize: "0.78rem" }}>{dryersError}</p>
             </div>
             <button onClick={() => refetchDryers()} className="px-3 py-1.5 bg-red-600 text-white rounded-lg text-xs font-semibold hover:bg-red-700">
               Thử lại
@@ -561,7 +590,7 @@ export function DevicesManagement() {
             title={`Dryers${zoneFilter !== "all" ? ` in ${areas.find(a => a.area_id === Number(zoneFilter))?.area_name || "selected zone"}` : ""}`}
             subtitle="Real-time dryer data from API"
             machines={dryers.map((d) => convertDryerToMachine(d)).filter((m): m is Machine => m !== null)}
-            onToggle={handleToggle}
+            onToggle={() => {}}
             onViewDetails={handleViewDetails}
             onDelete={handleDeleteMachine}
             onChangeName={handleChangeMachineName}
@@ -690,7 +719,7 @@ export function DevicesManagement() {
                             onChange={(e) => setPatchForm({ ...patchForm, recurring_interval: Number(e.target.value) })}
                             className="w-full px-3 py-2 border rounded"
                           />
-                          <span className="text-sm text-slate-500 shrink-0">hours</span>
+                          <span className="text-sm text-slate-500 shrink-0">minutes</span>
                         </div>
                       </div>
                     )}

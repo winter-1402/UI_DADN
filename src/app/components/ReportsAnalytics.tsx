@@ -32,7 +32,7 @@ import {
   Search,
   Loader,
 } from "lucide-react";
-import { monitoringAPI, structureAPI } from "../config/api.config";
+import { monitoringAPI, structureAPI,apiRequest } from "../config/api.config";
 
 // ── Data Generation ──────────────────────────────────────────────────────────
 
@@ -435,20 +435,14 @@ export function ReportsAnalytics({ batchId, appUserId }: ReportsAnalyticsProps =
       };
       
       const response = await monitoringAPI.reports.export(exportPayload as any);
-      
+      console.log('Export response:', response);
       // If response contains file data, download it
       if (response && (response.data || response.file)) {
-        const fileData = response.data || response;
+        const link = response.data.download_url || null;
         const fileName = `report_${selectedReportType}_${new Date().toISOString().split('T')[0]}.${selectedFileFormat}`;
         
-        // Create download link
-        const blob = new Blob([JSON.stringify(fileData)], { type: 'application/json' });
-        const url = window.URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = fileName;
-        link.click();
-        window.URL.revokeObjectURL(url);
+        const fileData = await apiRequest('GET', 'http://localhost:3000'+link);
+        
       }
       
       setExportDone(true);
@@ -882,7 +876,6 @@ export function ReportsAnalytics({ batchId, appUserId }: ReportsAnalyticsProps =
                   >
                     <option value="xlsx">Excel (.xlsx)</option>
                     <option value="pdf">PDF (.pdf)</option>
-                    <option value="csv">CSV (.csv)</option>
                   </select>
                 </div>
 

@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { toast } from "sonner";
-import { structureAPI, batchAPI, catalogAPI } from "../config/api.config";
+import { structureAPI, batchAPI, catalogAPI, FACTORY_ENDPOINTS, BATCH_ENDPOINTS, apiRequest } from "../config/api.config";
 import { 
   ArrowLeft, Thermometer, Droplets, Wind, Lightbulb, Play, Pause, Square, Loader, AlertTriangle,
   Clock, Calendar, Zap, Trash2, Save, CheckCircle2, Loader2, Plus, Sun, Cpu, Timer, ChevronDown, X,
@@ -18,6 +18,14 @@ type BatchStatus =
   | "aborted"
   | string;
 
+
+interface ScheduledInfo {
+  current_phase: number | null;
+  elapsed_seconds: number;
+  total_duration_seconds: number;
+  current_phase_remaining_seconds: number;
+  total_remaining_seconds: number;
+}
 interface BatchItem {
   batch_id: number;
   dry_id: number;
@@ -30,6 +38,19 @@ interface BatchItem {
   created_at?: string;
   fruit_name?: string;
   recipe_name?: string;
+  scheduled_info : ScheduledInfo;
+}
+
+interface ScheduledPhaseInfo {
+  batch_id?: number;
+  status?: string;
+  operation_mode?: string;
+  elapsed_seconds?: number;
+  total_duration_seconds?: number;
+  current_phase?: any;
+  current_phase_order?: number | null;
+  current_phase_remaining_seconds?: number;
+  total_remaining_seconds?: number;
 }
 
 interface RecipeSummary {
@@ -119,13 +140,25 @@ export function DeviceDetail() {
   const [thresholdValues, setThresholdValues] = useState<Record<number, number | string>>({});
   const [savingThresholdId, setSavingThresholdId] = useState<number | null>(null);
 
+  const [thresholdConditions, setThresholdConditions] = useState<Record<number, string>>({});
+  const [scheduledPhaseInfo, setScheduledPhaseInfo] = useState<ScheduledPhaseInfo | null>(null);
+  const [thresholdOperators, setThresholdOperators] = useState<Record<number, string>>({});
+
   // Dryers list state for dropdown filter
   const [dryersList, setDryersList] = useState<any[]>([]);
   const [loadingDryersList, setLoadingDryersList] = useState(false);
   const [thresholdEnabled, setThresholdEnabled] = useState<Record<number, boolean>>({});
+  const [showDeleteControlModal, setShowDeleteControlModal] = useState(false);
+  const [selectedDeleteControlId, setSelectedDeleteControlId] = useState<number | null>(null);
+  const [deletingControl, setDeletingControl] = useState(false);
 
   // Choose the most relevant active batch (running > paused > scheduled/pending)
   const activeBatch = pickActiveBatch(batches);
+  // Enriched batch detail fetched from GET /batches/{batchId}
+  const [activeBatchDetail, setActiveBatchDetail] = useState<any | null>(null);
+  const [loadingBatchDetail, setLoadingBatchDetail] = useState(false);
+  const [batchDetailError, setBatchDetailError] = useState<string | null>(null);
+  const currentBatch = activeBatchDetail ?? activeBatch;
 
   // ---- Fetchers -------------------------------------------------------------
   const fetchDryer = useCallback(async () => {
@@ -142,6 +175,31 @@ export function DeviceDetail() {
       setLoadingDryer(false);
     }
   }, [dryerId]);
+
+  
+  const fetchScheduledPhaseInfo = useCallback(async () => {
+      if (!activeBatch?.batch_id) {
+        setScheduledPhaseInfo(null);
+        setActiveBatchDetail(null);
+        return;
+      }
+      try {
+        setLoadingBatchDetail(true);
+        setBatchDetailError(null);
+        const response = await batchAPI.get(activeBatch.batch_id);
+        const batchDetail = response?.data ?? response ?? null;
+        const nextInfo = batchDetail?.scheduled_phase_info ?? null;
+        setScheduledPhaseInfo(nextInfo);
+        setActiveBatchDetail(batchDetail);
+      } catch (err) {
+          setScheduledPhaseInfo(null);
+          setActiveBatchDetail(null);
+          setBatchDetailError(err instanceof Error ? err.message : String(err))
+        console.error("Failed to fetch scheduled phase info:", err);
+      } finally {
+        setLoadingBatchDetail(false);
+      }
+    }, [activeBatch?.batch_id]);
 
   const fetchBatches = useCallback(async () => {
     if (!dryerId) return;
@@ -168,24 +226,28 @@ export function DeviceDetail() {
     fetchBatches();
   }, [fetchBatches]);
 
-  // Fetch list of all dryers for dropdown filter
   useEffect(() => {
-    const fetchDryersList = async () => {
-      try {
-        setLoadingDryersList(true);
-        const response = await structureAPI.dryers.list();
-        const list = response?.data ?? response ?? [];
-        setDryersList(Array.isArray(list) ? list : []);
-      } catch (err) {
-        console.error("Error fetching dryers list:", err);
-        setDryersList([]);
-      } finally {
-        setLoadingDryersList(false);
-      }
-    };
+    fetchScheduledPhaseInfo();
+  }, [fetchScheduledPhaseInfo]);
 
-    fetchDryersList();
-  }, []);
+
+  // Save threshold value for a sensor
+  const handleSaveThreshold = async (sensorId: number) => {
+    const val = thresholdValues[sensorId];
+    if (val === undefined || val === null || val === "") return;
+    setSavingThresholdId(sensorId);
+    try {
+      const numeric = Number(val);
+      await structureAPI.sensors.update(sensorId, numeric);
+      toast.success('Save threshold of the sensor');
+      await fetchDryer();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to save threshold');
+    } finally {
+      setSavingThresholdId(null);
+    }
+  };
+ 
 
   // Initialize threshold enabled state from dryer data
   useEffect(() => {
@@ -233,7 +295,7 @@ export function DeviceDetail() {
     };
   }, []);
 
-  // Fetch fruit recipe list and recipe detail for the current active batch
+  // Fetch fruit recipe detail for the current active batch
   useEffect(() => {
     const currentBatch = pickActiveBatch(batches);
 
@@ -243,45 +305,20 @@ export function DeviceDetail() {
       setRecipeInfoError(null);
       return;
     }
-
+    
     let cancelled = false;
 
     const fetchRecipeInfo = async () => {
       setLoadingRecipeInfo(true);
       setRecipeInfoError(null);
-
       try {
-        let recipesByFruit: RecipeSummary[] = [];
-
-        if (currentBatch.fruit_id) {
-          const listResponse = await catalogAPI.recipes.list({ fruit_id: currentBatch.fruit_id });
-          const listData = listResponse?.data ?? listResponse ?? [];
-          recipesByFruit = Array.isArray(listData) ? listData : [];
-        }
-
-        if (!cancelled) {
-          setFruitRecipes(recipesByFruit);
-        }
-
-        const selectedRecipeId =
-          currentBatch.recipe_id ?? recipesByFruit.find((r) => r.recipe_id)?.recipe_id;
-
-        if (!selectedRecipeId) {
-          if (!cancelled) {
-            setRecipeDetail(null);
-          }
-          return;
-        }
-
-        const detailResponse = await catalogAPI.recipes.get(selectedRecipeId);
+        if (!currentBatch.recipe_id) {setRecipeDetail(null); return;}
+        const detailResponse = await catalogAPI.recipes.get(currentBatch.recipe_id);
         const detailData = detailResponse?.data ?? detailResponse ?? null;
-
-        if (!cancelled) {
-          setRecipeDetail(detailData);
-        }
+        setRecipeDetail(detailData);
       } catch (err) {
         if (!cancelled) {
-          setRecipeInfoError(err instanceof Error ? err.message : "Không tải được thông tin recipe");
+          setRecipeInfoError(err instanceof Error ? err.message : "Failed to load recipe information");
           setRecipeDetail(null);
         }
       } finally {
@@ -290,9 +327,7 @@ export function DeviceDetail() {
         }
       }
     };
-
     fetchRecipeInfo();
-
     return () => {
       cancelled = true;
     };
@@ -311,14 +346,15 @@ export function DeviceDetail() {
   // Prefer phases stored on the active batch (batch-level custom phases).
   // Fallback to recipeDetail.phases when batch doesn't include phases.
   useEffect(() => {
-    if (!activeBatch?.is_customize) {
+    const batch = currentBatch;
+    if (!batch?.is_customize) {
       setCustomPhases([]);
       return;
     }
 
-    // If the active batch itself contains phases (customized stored on batch), use them
-    if (Array.isArray((activeBatch as any).phases) && (activeBatch as any).phases.length > 0) {
-      setCustomPhases((activeBatch as any).phases);
+    // If the batch itself contains phases (customized stored on batch), use them
+    if (Array.isArray((batch as any).phases) && (batch as any).phases.length > 0) {
+      setCustomPhases((batch as any).phases);
       return;
     }
 
@@ -329,7 +365,7 @@ export function DeviceDetail() {
     }
 
     setCustomPhases([]);
-  }, [activeBatch?.is_customize, (activeBatch as any)?.phases, recipeDetail?.phases]);
+  }, [currentBatch?.is_customize, (currentBatch as any)?.phases, recipeDetail?.phases]);
 
   // ---- Batch actions --------------------------------------------------------
   const runBatchAction = async (
@@ -359,59 +395,46 @@ export function DeviceDetail() {
         toast.success(successMsg);
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Thao tác mẻ sấy thất bại");
+      toast.error(err instanceof Error ? err.message : "Failed to perform batch action");
     } finally {
       setBatchActionId(null);
     }
   };
 
-  // Compute which phase is currently running based on batch start time and phase durations
+  // Compute which phase is currently running based on the batch API response
   const runningPhaseInfo = (() => {
     if (!activeBatch) return { index: 0, phase: null, progressPercent: 0 };
 
-    // safe phases array
-    const phases = Array.isArray(recipeDetail?.phases) ? recipeDetail!.phases : [];
+    const phases = Array.isArray(recipeDetail?.phases) ? recipeDetail.phases : [];
+    const phaseInfo = scheduledPhaseInfo;
 
-    // Try various possible start time fields on batch
-    const rawStart = (activeBatch as any).start_time || (activeBatch as any).started_at || activeBatch.created_at || null;
-    if (!rawStart) return { index: 0, phase: phases[0] ?? null, progressPercent: 0 };
+    if (phaseInfo?.current_phase) {
+      const durationSeconds = Number(phaseInfo.current_phase.duration_seconds ?? 0);
+      const remainingSeconds = Number(
+        phaseInfo.current_phase_remaining_seconds ?? phaseInfo.total_remaining_seconds ?? 0
+      );
+      const progressPercent =
+        durationSeconds > 0
+          ? Math.max(0, Math.min(100, Math.round(((durationSeconds - remainingSeconds) / durationSeconds) * 100)))
+          : 0;
 
-    const startMs = Date.parse(rawStart);
-    if (Number.isNaN(startMs)) return { index: 0, phase: phases[0] ?? null, progressPercent: 0 };
-    let diffMs = Date.now() - startMs;
-
-    // Sum durations to find current phase
-    for (let i = 0; i < phases.length; i++) {
-      const ph = phases[i];
-      const durSec =
-        ph?.duration_seconds ??
-        (ph?.duration != null ? Math.round(Number(ph.duration) * 3600) :
-          (ph?.duration_minutes != null ? Math.round(Number(ph.duration_minutes) * 60) : 0));
-
-      if (durSec <= 0) {
-        // treat zero-duration as instant; skip
-        continue;
-      }
-
-      if (diffMs < durSec * 1000) {
-        const progressPercent = Math.round((diffMs / (durSec * 1000)) * 100);
-        return { index: i, phase: ph, progressPercent };
-      }
-      diffMs -= durSec * 1000;
+      return {
+        index: Math.max(0, Number(phaseInfo.current_phase_order ?? 1) - 1),
+        phase: phaseInfo.current_phase,
+        progressPercent,
+      };
     }
 
-    if (diffMs < 0) {
-      // mark completed asynchronously, but return final phase info synchronously
-      void runBatchAction(activeBatch.batch_id, "completed", "Đã hoàn thành mẻ sấy");
-      return { index: phases.length > 0 ? phases.length - 1 : 0, phase: phases[phases.length - 1] ?? null, progressPercent: 100 };
+    if (!phases.length) {
+      return { index: 0, phase: null, progressPercent: 0 };
     }
 
-    return { index: phases.length > 0 ? phases.length - 1 : 0, phase: phases[phases.length - 1] ?? null, progressPercent: 100 };
+    return { index: 0, phase: phases[0] ?? null, progressPercent: 0 };
   })();
 
-  const startBatch = (batchId: number) => runBatchAction(batchId, "start", "Đã bắt đầu mẻ sấy");
-  const pauseBatch = (batchId: number) => runBatchAction(batchId, "pause", "Đã tạm dừng mẻ sấy");
-  const resumeBatch = (batchId: number) => runBatchAction(batchId, "resume", "Đã tiếp tục mẻ sấy");
+  const startBatch = (batchId: number) => runBatchAction(batchId, "start", "Batch started");
+  const pauseBatch = (batchId: number) => runBatchAction(batchId, "pause", "Batch paused");
+  const resumeBatch = (batchId: number) => runBatchAction(batchId, "resume", "Batch resumed");
   const abortBatch = (batchId: number) => {
     if (!confirm("Huỷ mẻ sấy này?")) return;
     runBatchAction(batchId, "abort", "Đã huỷ mẻ sấy");
@@ -433,9 +456,9 @@ export function DeviceDetail() {
       await batchAPI.update(activeBatch.batch_id, {
         phases: customPhases,
       });
-      toast.success("Cập nhật phase thành công");
+      toast.success("Phase updated successfully");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Cập nhật phase thất bại");
+      toast.error(err instanceof Error ? err.message : "Failed to update phase");
     } finally {
       setIsSavingCustomPhases(false);
     }
@@ -446,44 +469,20 @@ export function DeviceDetail() {
     setControlActionId(controlId);
     try {
       await structureAPI.controls.update(controlId, { status: nextStatus });
-      toast.success(`Đã chuyển ${nextStatus === "active" ? "bật" : "tắt"} thiết bị`);
+      toast.success(`Successfully ${nextStatus === "active" ? "enabled" : "disabled"} the device`);
       await fetchDryer();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Cập nhật thiết bị thất bại");
+      toast.error(err instanceof Error ? err.message : "Failed to update device");
     } finally {
       setControlActionId(null);
     }
   };
 
-  const handleSaveThreshold = async (sensorId: number) => {
-    if (thresholdValues[sensorId] === undefined || thresholdValues[sensorId] === "") {
-      toast.error("Vui lòng nhập giá trị ngưỡng");
-      return;
-    }
 
-    setSavingThresholdId(sensorId);
-    try {
-      // API expects just a number for sensor update
-      await structureAPI.sensors.update(sensorId, Number(thresholdValues[sensorId]));
-      toast.success("Cập nhật ngưỡng thành công");
-      setThresholdValues((prev) => ({ ...prev, [sensorId]: "" }));
-      await fetchDryer();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Cập nhật ngưỡng thất bại");
-    } finally {
-      setSavingThresholdId(null);
-    }
-  };
-
-  const handleToggleThreshold = async (sensorId: number, currentEnabled: boolean) => {
-    // Threshold toggle feature requires API model update
-    // Currently disabled until API supports threshold_enabled property
-    toast.info("Tính năng này sẽ được cập nhật");
-  };
 
   const handleAddControl = async (controlType: "fan" | "lamp") => {
     if (!dryerId || !dryerData) return;
-
+    console.log(dryerId);
     setCreatingControlType(controlType);
     try {
       const controls = Array.isArray(dryerData.controls) ? dryerData.controls : [];
@@ -491,37 +490,78 @@ export function DeviceDetail() {
       const nextNumber = countByType + 1;
       const controlName = `${controlType === "fan" ? "Fan" : "Lamp"} ${nextNumber}`;
 
-      await structureAPI.controls.create({
-        dry_id: dryerId,
+     await structureAPI.controls.create(dryerId, {
         control_type: controlType,
         control_name: controlName,
-        status: "inactive",
-      });
-
-      toast.success(`Đã thêm ${controlName}`);
+     });
+      toast.success(`Adding ${controlName}`);
       await fetchDryer();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Thêm output device thất bại");
+      toast.error(err instanceof Error ? err.message : "Failed to add output device");
     } finally {
       setCreatingControlType(null);
     }
   };
 
-  const handleThresholdToggle = async (enabled: boolean) => {
-    if (!activeBatch) return;
+  const showFormDelete = () => {
+    const controls = Array.isArray(dryerData?.controls) ? dryerData.controls : [];
+    if (controls.length === 0) {
+      toast.info("Không có thiết bị output để xoá");
+      return;
+    }
+
+    setSelectedDeleteControlId(controls[0].control_id);
+    setShowDeleteControlModal(true);
+  };
+
+  const handleDeleteSelectedControl = async () => {
+    if (!selectedDeleteControlId) {
+      toast.error("Please choose the device to delete");
+      return;
+    }
+
+    if (!confirm("Are you sure you want to delete this device?")) {
+      return;
+    }
+
+    setDeletingControl(true);
     try {
-      await batchAPI.update(activeBatch.batch_id, {
-        threshold_enabled: enabled,
-      });
-      toast.success("Đã cập nhật ngưỡng thiết bị");
+      await apiRequest("DELETE", FACTORY_ENDPOINTS.controls.delete(selectedDeleteControlId));
+      toast.success("Successfully deleted the output device");
+      setShowDeleteControlModal(false);
+      setSelectedDeleteControlId(null);
+      await fetchDryer();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to delete the device");
+    } finally {
+      setDeletingControl(false);
+    }
+  };
+
+  const handleThresholdToggle = async (enabled: boolean) => {
+    if (!currentBatch) return;
+    try {
+      await batchAPI.threshold(currentBatch.batch_id, enabled);
+      toast.success("Successfully updated device threshold");
       await fetchBatches();
       await fetchDryer();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Cập nhật ngưỡng thất bại");
+      toast.error(err instanceof Error ? err.message : "Failed to update device threshold");
     }
   };
 
   // ---- Render ---------------------------------------------------------------
+
+  const formatDuration = (seconds?: number | null) => {
+    const s = Number(seconds ?? 0);
+    if (!Number.isFinite(s) || s <= 0) return "0s";
+    const hours = Math.floor(s / 3600);
+    const minutes = Math.floor((s % 3600) / 60);
+    const secs = Math.floor(s % 60);
+    if (hours > 0) return `${hours}h ${minutes}m ${secs}s`;
+    if (minutes > 0) return `${minutes}m ${secs}s`;
+    return `${secs}s`;
+  };
 
   // Loading skeleton for dryer
   if (loadingDryer) {
@@ -530,7 +570,7 @@ export function DeviceDetail() {
         <div className="max-w-screen-lg mx-auto space-y-6">
           <div className="flex items-center gap-3 text-slate-500">
             <Loader className="animate-spin" size={20} />
-            <span>Đang tải dữ liệu thiết bị...</span>
+            <span>Loading device data...</span>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {Array.from({ length: 3 }).map((_, i) => (
@@ -583,21 +623,21 @@ export function DeviceDetail() {
 
   // Dependent variables for display
   const matchedRecipeFromFruit =
-    activeBatch?.recipe_id != null
-      ? fruitRecipes.find((recipe) => recipe.recipe_id === activeBatch.recipe_id)
+    currentBatch?.recipe_id != null
+      ? fruitRecipes.find((recipe) => recipe.recipe_id === currentBatch.recipe_id)
       : null;
   const fruitNameFromApi =
-    activeBatch?.fruit_id != null ? fruitNameById[activeBatch.fruit_id] : undefined;
+    currentBatch?.fruit_id != null ? fruitNameById[currentBatch.fruit_id] : undefined;
   const fruitDisplayName =
     fruitNameFromApi ??
-    activeBatch?.fruit_name ??
+    currentBatch?.fruit_name ??
     matchedRecipeFromFruit?.fruit_name ??
-    (activeBatch?.fruit_id != null ? `Fruit #${activeBatch.fruit_id}` : "-");
+    (currentBatch?.fruit_id != null ? `Fruit #${currentBatch.fruit_id}` : "-");
   const recipeDisplayName =
     recipeDetail?.recipe_name ??
     matchedRecipeFromFruit?.recipe_name ??
-    activeBatch?.recipe_name ??
-    (activeBatch?.recipe_id != null ? `Recipe #${activeBatch.recipe_id}` : "-");
+    currentBatch?.recipe_name ??
+    (currentBatch?.recipe_id != null ? `Recipe #${currentBatch.recipe_id}` : "-");
   const recipePhases = Array.isArray(recipeDetail?.phases) ? recipeDetail.phases : [];
   const sortedControls = [...(dryerData.controls ?? [])].sort((a, b) => {
     const typeRank = (type: string) => (type === "fan" ? 0 : type === "lamp" ? 1 : 2);
@@ -616,32 +656,7 @@ export function DeviceDetail() {
               className="flex items-center gap-2 text-slate-600 mb-1"
             >
               <ArrowLeft /> Back
-            </button>
-            
-            {/* Dryers Selector Dropdown */}
-            <div className="relative">
-              <select
-                value={dryerId || ""}
-                onChange={(e) => {
-                  const selectedId = e.target.value;
-                  if (selectedId) {
-                    navigate(`/devices/${selectedId}`);
-                  }
-                }}
-                disabled={loadingDryersList}
-                className="appearance-none px-4 py-2 bg-white border border-emerald-300 rounded-lg text-emerald-600 font-semibold text-sm cursor-pointer focus:outline-none focus:ring-2 focus:ring-emerald-400 hover:border-emerald-400 transition-colors"
-              >
-                <option value="">
-                  {loadingDryersList ? "Loading..." : "All Machines"}
-                </option>
-                {dryersList.map((dryer) => (
-                  <option key={dryer.dry_id} value={dryer.dry_id}>
-                    {dryer.dry_name}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown size={16} className="absolute right-2 top-1/2 transform -translate-y-1/2 text-emerald-600 pointer-events-none" />
-            </div>
+            </button>           
           </div>
 
           <div>
@@ -784,6 +799,13 @@ export function DeviceDetail() {
                 >
                   {creatingControlType === "lamp" ? "Adding..." : "+ Lamp"}
                 </button>
+                <button
+                  type="button"
+                  onClick={showFormDelete}
+                  className="ml-2 shrink-0 text-xs rounded px-2.5 py-1 font-semibold bg-red-100 text-red-700 hover:bg-red-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Delete
+                </button>
               </div>
             </div>
             <div className="mt-3 space-y-2">
@@ -833,17 +855,20 @@ export function DeviceDetail() {
             <div className="bg-white rounded-xl border p-4 md:col-span-2">
               <div className="flex items-center justify-between">
                 <h3 className="text-slate-800" style={{ fontWeight: 700 }}>
-                  Mẻ sấy hiện tại
+                  Batch processing
                 </h3>
                 <button
-                  onClick={fetchBatches}
+                  onClick={() => {
+                    fetchBatches();
+                    fetchScheduledPhaseInfo();
+                  }}
                   className="text-xs text-slate-500 hover:text-slate-700"
                 >
                   Refresh
                 </button>
               </div>
               {activeBatch && (
-                <div className="mt-2 flex items-center gap-2">
+                <div className="mt-2 flex items-center gap-2 relative">
                   <button
                     onClick={() => pauseBatch(activeBatch.batch_id)}
                     disabled={
@@ -852,14 +877,14 @@ export function DeviceDetail() {
                     }
                     className="px-3 py-1.5 rounded text-xs font-semibold bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Dừng
+                    Stop
                   </button>
                   <button
                     onClick={() => abortBatch(activeBatch.batch_id)}
                     disabled={batchActionId === activeBatch.batch_id}
                     className="px-3 py-1.5 rounded text-xs font-semibold bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed ml-2"
                   >
-                    Huỷ
+                    Abort
                   </button>
                   <button
                     onClick={() => {
@@ -872,14 +897,14 @@ export function DeviceDetail() {
                     disabled={batchActionId === activeBatch.batch_id || !(activeBatch.status === "paused" || activeBatch.status === "pending")}
                     className="px-3 py-1.5 rounded text-xs font-semibold bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Tiếp tục
+                    Continue
                   </button>
                 </div>
               )}
               {!activeBatch ? (
                 <div className="mt-3 text-slate-400">Không có mẻ sấy đang hoạt động.</div>
               ) : (
-                <div className="mt-3 p-4 border rounded bg-slate-50">
+                <div className="mt-3 p-4 border rounded bg-slate-50 relative">
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <p className="text-slate-800 font-bold text-sm">
@@ -895,10 +920,10 @@ export function DeviceDetail() {
                     </span>
                   </div>
                   <div className="mt-3 p-3 bg-white rounded border border-slate-200">
-                    <p className="text-slate-700 text-xs font-semibold">Thông tin áp dụng</p>
+                    <p className="text-slate-700 text-xs font-semibold">BATCH INFORMATION</p>
 
                     {loadingRecipeInfo && (
-                      <p className="mt-1 text-xs text-slate-400">Đang tải thông tin recipe...</p>
+                      <p className="mt-1 text-xs text-slate-400">LOADING...</p>
                     )}
 
                     {!loadingRecipeInfo && recipeInfoError && (
@@ -909,24 +934,24 @@ export function DeviceDetail() {
                       <div className="mt-2 space-y-2 text-xs">
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                           <div className="p-2 rounded border border-slate-100 bg-slate-50">
-                            <span className="text-slate-400 block">Tên trái cây</span>
+                            <span className="text-slate-400 block">Fruit name</span>
                             <span className="text-slate-700 font-semibold">{fruitDisplayName}</span>
                           </div>
                           <div className="p-2 rounded border border-slate-100 bg-slate-50">
-                            <span className="text-slate-400 block">Tên recipe</span>
+                            <span className="text-slate-400 block">Recipe name</span>
                             <span className="text-slate-700 font-semibold">{recipeDisplayName}</span>
                           </div>
                   <div className="p-2 rounded border border-slate-100 bg-slate-50 sm:col-span-2">
-                            <span className="text-slate-400 block">Chế độ ngưỡng</span>
+                            <span className="text-slate-400 block">Threshold mode</span>
                             <span className={`font-semibold ${activeBatch.threshold_enabled ? "text-purple-700" : "text-slate-700"}`}>
-                              {activeBatch.threshold_enabled ? "Có áp dụng" : "Không áp dụng"}
+                              {activeBatch.threshold_enabled ? "Yes" : "No"}
                             </span>
                           </div>
                           
                         {/* Currently Running Phase */}
               <div className="p-2 rounded border border-slate-100 bg-slate-50 sm:col-span-2">
                 <h3 className="text-slate-700" style={{ fontWeight: 1000, fontSize: "0.9375rem" }}>
-                  Phase Đang Chạy
+                  Current Phase
                 </h3>
 
                 {activeBatch && runningPhaseInfo && (
@@ -938,13 +963,22 @@ export function DeviceDetail() {
                         <span className="flex items-center justify-center w-10 h-10 rounded-full bg-emerald-500 text-white" style={{ fontSize: "0.9rem", fontWeight: 700 }}>
                           {runningPhaseInfo.phase && runningPhaseInfo.index != null ? `P${runningPhaseInfo.index + 1}` : "P1"}
                         </span>
-                        <div className="flex-1">
-                          <h4 className="text-emerald-700" style={{ fontSize: "1.125rem", fontWeight: 700 }}>
-                            {runningPhaseInfo.phase?.phase_name ?? runningPhaseInfo.phase?.name ?? `Phase ${runningPhaseInfo.index + 1}`}
-                          </h4>
-                          <p className="text-emerald-600 text-xs">
-                            Phase {runningPhaseInfo.index + 1} / {recipePhases.length}
-                          </p>
+                        <div className="flex-1 flex items-center justify-between">
+                          <div>
+                            <h4 className="text-emerald-700" style={{ fontSize: "1.125rem", fontWeight: 700 }}>
+                              {runningPhaseInfo.phase?.phase_name ?? runningPhaseInfo.phase?.name ?? `Phase ${runningPhaseInfo.index + 1}`}
+                            </h4>
+                            <p className="text-emerald-600 text-xs">
+                              Phase {runningPhaseInfo.index + 1} / {recipePhases.length}
+                            </p>
+                          </div>
+
+                          {/* Small pill (image-like) shown immediately to the right of the Phase text */}
+                          <div className="ml-3 shrink-0">
+                            <div className="inline-flex items-center bg-white border border-slate-200 rounded-full px-3 py-1 text-xs font-semibold text-slate-600 shadow-sm">
+                              {`Elapsed: ${formatDuration(scheduledPhaseInfo?.elapsed_seconds ?? currentBatch?.elapsed_seconds ?? 0)}`}
+                            </div>
+                          </div>
                         </div>
                       </div>
 
@@ -964,7 +998,7 @@ export function DeviceDetail() {
                         <div className="bg-slate-50 rounded-lg border border-slate-200 p-5 w-full">
                           <div className="flex items-center gap-2 mb-4">
                             <Cpu size={18} className="text-emerald-600" />
-                            <span className="text-slate-700 text-sm font-semibold">Thiết bị hoạt động</span>
+                            <span className="text-slate-700 text-sm font-semibold">Active Devices</span>
                           </div>
                           <div className="space-y-3 min-h-[50px]">
                             {runningPhaseInfo.phase?.actions && 
@@ -990,7 +1024,7 @@ export function DeviceDetail() {
                                   ))}
                               </>
                             ) : (
-                              <span className="text-slate-400 text-sm">Không có thiết bị</span>
+                              <span className="text-slate-400 text-sm">No Change</span>
                             )}
                           </div>
                         </div>
@@ -999,7 +1033,7 @@ export function DeviceDetail() {
                         <div className="bg-slate-50 rounded-lg border border-slate-200 p-5 w-full">
                           <div className="flex items-center gap-2 mb-4">
                             <Clock size={18} className="text-emerald-600" />
-                            <span className="text-slate-700 text-sm font-semibold">Thời lượng</span>
+                            <span className="text-slate-700 text-sm font-semibold">Duration</span>
                           </div>
                               <div className="min-h-[50px] flex items-center">
                             <span className="text-emerald-700 font-bold text-2xl">
@@ -1007,7 +1041,7 @@ export function DeviceDetail() {
                                 ? Math.round(runningPhaseInfo.phase.duration * 60) 
                                 : runningPhaseInfo.phase?.duration_seconds
                                   ? Math.round(runningPhaseInfo.phase.duration_seconds / 60)
-                                  : 0} phút
+                                  : 0} minutes
                             </span>
                           </div>
                         </div>
@@ -1030,26 +1064,23 @@ export function DeviceDetail() {
                             <div className="bg-white rounded-xl border p-4 md:col-span-2">
                             <div className="p-3 rounded border border-slate-100 bg-purple-50 sm:col-span-2">
                               <div className="flex items-center justify-between mb-4">
-                                <span className="text-slate-800 font-bold">Ngưỡng thiết bị</span>
+                                <span className="text-slate-800 font-bold">Threshold Settings</span>
                                 {activeBatch.threshold_enabled ? (
                                   <button 
                                     onClick={() => handleThresholdToggle(false)}
                                     className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-red-500 hover:bg-red-600 text-white transition-all"
                                   >
-                                    ✕ Tắt ngưỡng
+                                    ✕ Disable threshold
                                   </button>
                                 ) : (
                                 <button
                                   onClick={() => handleThresholdToggle(true)}
-                                  className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-green-500 text-white opacity-50 cursor-not-allowed"
+                                  className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-green-500 hover:bg-green-600 text-white transition-all"
                                 >
-                                  ✓ Bật ngưỡng
+                                  ✓ Enable threshold
                                 </button>
                                 )
                                 }
-                                
-
-
                               </div>
                               
                               <div className="space-y-3">
@@ -1067,16 +1098,19 @@ export function DeviceDetail() {
                                         )}
                                         <div>
                                           <p className="text-slate-800 font-semibold text-sm capitalize">
-                                            Ngưỡng {sensor.sensor_type === "temperature" ? "nhiệt độ" : sensor.sensor_type === "humidity" ? "độ ẩm" : "light"} hiện tại là: <span className="text-purple-700">{"Lớn hơn"} {sensor.threshold ?? "-"} {sensor.sensor_type === "temperature" ? "°C" : "%" }</span>
+                                            Ngưỡng {sensor.sensor_type === "temperature" ? "nhiệt độ" : sensor.sensor_type === "humidity" ? "độ ẩm" : "light"} hiện tại là: <span className="text-purple-700">{(thresholdConditions[sensor.sensor_id] === 'lt' || thresholdConditions[sensor.sensor_id] === '<' || thresholdConditions[sensor.sensor_id] === 'less') ? 'Nhỏ hơn' : 'Lớn hơn'} {sensor.threshold ?? "-"} {sensor.sensor_type === "temperature" ? "°C" : "%" }</span>
                                           </p>
                                         </div>
                                       </div>
                                     </div>
                                     
                                     {/* Chọn hành động khi vượt ngưỡng */}
-                                    <div className="mb-2">
+                                    <div className={`mb-2 ${!activeBatch?.threshold_enabled ? 'opacity-60' : ''}`}>
                                       <label className="text-xs text-slate-600 block mb-1">Hành động khi vượt ngưỡng</label>
-                                      <select className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-purple-400">
+                                      <select
+                                        disabled={!activeBatch?.threshold_enabled}
+                                        className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-purple-400"
+                                      >
                                         <option value="">-- Chọn hành động --</option>
                                         <option value="stop">Dừng máy</option>
                                         <option value="alarm">Báo động</option>
@@ -1086,7 +1120,19 @@ export function DeviceDetail() {
                                     </div>
                                     
                                     {/* Input để điều chỉnh */}
-                                    <div className="flex items-end gap-2">
+                                    <div className={`flex items-end gap-2 ${!activeBatch?.threshold_enabled ? 'opacity-60' : ''}`}>
+                                      <div className="shrink-0">
+                                        <label className="text-xs text-slate-600 block mb-1">So sánh</label>
+                                        <select
+                                          value={thresholdOperators[sensor.sensor_id] ?? thresholdConditions[sensor.sensor_id] ?? 'gt'}
+                                          onChange={(e) => setThresholdOperators({...thresholdOperators, [sensor.sensor_id]: e.target.value})}
+                                          disabled={!activeBatch?.threshold_enabled || savingThresholdId === sensor.sensor_id}
+                                          className="px-2 py-2 bg-white border border-slate-300 rounded-lg text-sm outline-none w-28"
+                                        >
+                                          <option value="gt">Lớn hơn</option>
+                                          <option value="lt">Nhỏ hơn</option>
+                                        </select>
+                                      </div>
                                       <div className="flex-1">
                                         <label className="text-xs text-slate-600 block mb-1">Giá trị mới</label>
                                         <div className="flex items-center gap-1">
@@ -1097,7 +1143,7 @@ export function DeviceDetail() {
                                             placeholder={sensor.threshold?.toString() || "0"}
                                             className="flex-1 px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-purple-400"
                                             step={sensor.sensor_type === "temperature" ? "0.1" : "1"}
-                                            disabled={savingThresholdId === sensor.sensor_id}
+                                            disabled={!activeBatch?.threshold_enabled || savingThresholdId === sensor.sensor_id}
                                           />
                                           <span className="text-sm text-slate-500 font-medium shrink-0">
                                             {sensor.sensor_type === "temperature" ? "°C" : "%"}
@@ -1106,11 +1152,15 @@ export function DeviceDetail() {
                                       </div>
                                       <button
                                         onClick={() => handleSaveThreshold(sensor.sensor_id)}
-                                        disabled={savingThresholdId === sensor.sensor_id || !thresholdValues[sensor.sensor_id]}
+                                        disabled={
+                                          savingThresholdId === sensor.sensor_id ||
+                                          !thresholdValues[sensor.sensor_id] ||
+                                          !activeBatch?.threshold_enabled
+                                        }
                                         className={`px-3 py-2 rounded-lg text-sm font-semibold transition-all flex items-center gap-1.5 shrink-0 ${
                                           savingThresholdId === sensor.sensor_id
                                             ? "bg-slate-300 text-slate-500 cursor-not-allowed"
-                                            : thresholdValues[sensor.sensor_id]
+                                            : thresholdValues[sensor.sensor_id] && activeBatch?.threshold_enabled
                                               ? "bg-purple-500 hover:bg-purple-600 text-white"
                                               : "bg-slate-200 text-slate-400 cursor-not-allowed"
                                         }`}
@@ -1302,6 +1352,67 @@ export function DeviceDetail() {
             
           )}
         </div>
+
+        {showDeleteControlModal && (
+          <div className="fixed inset-0 z-50 bg-slate-900/40 flex items-center justify-center p-4">
+            <div className="w-full max-w-md bg-white rounded-2xl border border-slate-200 shadow-2xl p-5">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-slate-800" style={{ fontWeight: 700 }}>Select Device to Delete</h3>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowDeleteControlModal(false);
+                    setSelectedDeleteControlId(null);
+                  }}
+                  className="text-slate-500"
+                >
+                  Close
+                </button>
+              </div>
+
+              <div className="space-y-2 max-h-64 overflow-y-auto">
+                {sortedControls.map((control) => (
+                  <label
+                    key={control.control_id}
+                    className="flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-slate-50"
+                  >
+                    <input
+                      type="radio"
+                      name="deleteControl"
+                      checked={selectedDeleteControlId === control.control_id}
+                      onChange={() => setSelectedDeleteControlId(control.control_id)}
+                    />
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-slate-700 truncate">{control.control_name}</p>
+                      <p className="text-xs text-slate-500 capitalize">{control.control_type}</p>
+                    </div>
+                  </label>
+                ))}
+              </div>
+
+              <div className="flex justify-end gap-2 mt-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowDeleteControlModal(false);
+                    setSelectedDeleteControlId(null);
+                  }}
+                  className="px-3 py-2 border rounded"
+                >
+                  Huỷ
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDeleteSelectedControl}
+                  disabled={deletingControl || selectedDeleteControlId == null}
+                  className={`px-3 py-2 text-white rounded ${deletingControl ? "bg-red-400 cursor-not-allowed" : "bg-red-600 hover:bg-red-700"}`}
+                >
+                  {deletingControl ? "Đang xoá..." : "Xoá thiết bị"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

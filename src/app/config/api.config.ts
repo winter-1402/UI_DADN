@@ -63,7 +63,7 @@ export const FACTORY_ENDPOINTS = {
   // Controls
   controls: {
     list: `${API_BASE_URL}/controls`,            // GET: List controls (with optional dry_id filter)
-    create: `${API_BASE_URL}/controls`,          // POST: Create control (admin only)
+    create: (dryerId: number) => `${API_BASE_URL}/dryers/${dryerId}/controls`,          // POST: Create control (admin only)
     get: (controlId: number) => `${API_BASE_URL}/controls/${controlId}`,
     update: (controlId: number) => `${API_BASE_URL}/controls/${controlId}`,  // PATCH
     delete: (controlId: number) => `${API_BASE_URL}/controls/${controlId}`,
@@ -103,6 +103,7 @@ export const CATALOG_ENDPOINTS = {
   
   // Policies (sub-resource of recipes)
   policies: {
+    list: `${API_BASE_URL}/policies`,
     create: (recipeId: number) => `${API_BASE_URL}/recipes/${recipeId}/policies`,  // POST
     update: (recipeId: number, policyId: number) => `${API_BASE_URL}/recipes/${recipeId}/policies/${policyId}`,  // PATCH
     delete: (recipeId: number, policyId: number) => `${API_BASE_URL}/recipes/${recipeId}/policies/${policyId}`,
@@ -376,8 +377,8 @@ export const structureAPI = {
     list: (filters?: { dry_id?: number; control_type?: string }) =>
       apiRequest('GET', `${FACTORY_ENDPOINTS.controls.list}${createQueryParams(filters || {})}`),
 
-    create: (data: Record<string, any>) =>
-      apiRequest('POST', FACTORY_ENDPOINTS.controls.create, data),
+    create: (dry_id: number, data: Record<string, any>) =>
+      apiRequest('POST', FACTORY_ENDPOINTS.controls.create(dry_id), data),
     
     get: (controlId: number) =>
       apiRequest('GET', FACTORY_ENDPOINTS.controls.get(controlId)),
